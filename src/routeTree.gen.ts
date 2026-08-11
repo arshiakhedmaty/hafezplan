@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedPlansRouteImport } from './routes/_authenticated/plans'
 import { Route as AuthenticatedPreferencesRouteImport } from './routes/_authenticated/preferences'
 import { Route as AuthenticatedSetupRouteImport } from './routes/_authenticated/setup'
 
@@ -29,6 +30,11 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedPlansRoute = AuthenticatedPlansRouteImport.update({
+  id: '/plans',
+  path: '/plans',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedPreferencesRoute =
   AuthenticatedPreferencesRouteImport.update({
     id: '/preferences',
@@ -44,12 +50,14 @@ const AuthenticatedSetupRoute = AuthenticatedSetupRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/plans': typeof AuthenticatedPlansRoute
   '/preferences': typeof AuthenticatedPreferencesRoute
   '/setup': typeof AuthenticatedSetupRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/plans': typeof AuthenticatedPlansRoute
   '/preferences': typeof AuthenticatedPreferencesRoute
   '/setup': typeof AuthenticatedSetupRoute
 }
@@ -58,19 +66,21 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/plans': typeof AuthenticatedPlansRoute
   '/_authenticated/preferences': typeof AuthenticatedPreferencesRoute
   '/_authenticated/setup': typeof AuthenticatedSetupRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/preferences' | '/setup'
+  fullPaths: '/' | '/auth' | '/plans' | '/preferences' | '/setup'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/preferences' | '/setup'
+  to: '/' | '/auth' | '/plans' | '/preferences' | '/setup'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/plans'
     | '/_authenticated/preferences'
     | '/_authenticated/setup'
   fileRoutesById: FileRoutesById
@@ -104,6 +114,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/plans': {
+      id: '/_authenticated/plans'
+      path: '/plans'
+      fullPath: '/plans'
+      preLoaderRoute: typeof AuthenticatedPlansRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/preferences': {
       id: '/_authenticated/preferences'
       path: '/preferences'
@@ -122,11 +139,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedPlansRoute: typeof AuthenticatedPlansRoute
   AuthenticatedPreferencesRoute: typeof AuthenticatedPreferencesRoute
   AuthenticatedSetupRoute: typeof AuthenticatedSetupRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedPlansRoute: AuthenticatedPlansRoute,
   AuthenticatedPreferencesRoute: AuthenticatedPreferencesRoute,
   AuthenticatedSetupRoute: AuthenticatedSetupRoute,
 }
