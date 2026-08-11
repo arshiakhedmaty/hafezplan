@@ -10,6 +10,7 @@ import {
   emptyStudentState,
   type Course,
   type Preferences,
+  type PrereqNode,
   type Section,
   type StudentState,
 } from "../types";
@@ -74,23 +75,23 @@ describe("prerequisites", () => {
     expect(evaluatePrereq({ type: "course", code: "A" }, { completed: new Set(), known }).outcome).toBe("unsatisfied");
   });
   it("handles AND", () => {
-    const node = { type: "and", items: [{ type: "course", code: "A" }, { type: "course", code: "B" }] } as const;
+    const node: PrereqNode = { type: "and", items: [{ type: "course", code: "A" }, { type: "course", code: "B" }] };
     expect(evaluatePrereq(node, { completed: new Set(["A"]), known }).outcome).toBe("unsatisfied");
     expect(evaluatePrereq(node, { completed: new Set(["A", "B"]), known }).outcome).toBe("satisfied");
   });
   it("handles OR", () => {
-    const node = { type: "or", items: [{ type: "course", code: "A" }, { type: "course", code: "B" }] } as const;
+    const node: PrereqNode = { type: "or", items: [{ type: "course", code: "A" }, { type: "course", code: "B" }] };
     expect(evaluatePrereq(node, { completed: new Set(["B"]), known }).outcome).toBe("satisfied");
     expect(evaluatePrereq(node, { completed: new Set(), known }).outcome).toBe("unsatisfied");
   });
   it("handles nested (A AND B) OR C", () => {
-    const node = {
+    const node: PrereqNode = {
       type: "or",
       items: [
         { type: "and", items: [{ type: "course", code: "A" }, { type: "course", code: "B" }] },
         { type: "course", code: "C" },
       ],
-    } as const;
+    };
     expect(evaluatePrereq(node, { completed: new Set(["C"]), known }).outcome).toBe("satisfied");
     expect(evaluatePrereq(node, { completed: new Set(["A", "B"]), known }).outcome).toBe("satisfied");
     expect(evaluatePrereq(node, { completed: new Set(["A"]), known }).outcome).toBe("unsatisfied");
