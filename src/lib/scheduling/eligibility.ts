@@ -51,7 +51,7 @@ export function evaluateEligibility({ courses, sections, student }: EligibilityI
   // so every offered course counts as potentially concurrent.
   const concurrent = new Set(courses.map((c) => c.code));
 
-  const ctx: PrereqContext = { completed, known, concurrent: undefined };
+  const ctx: PrereqContext = { completed, known };
   const coreqCtx: PrereqContext = { completed, known, concurrent };
 
   return courses.map((course) => {
