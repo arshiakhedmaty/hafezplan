@@ -14,7 +14,218 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      course_sections: {
+        Row: {
+          capacity: number | null
+          course_id: string
+          created_at: string
+          exam_date: string | null
+          exam_end: string | null
+          exam_start: string | null
+          id: string
+          location: string | null
+          meetings: Json
+          owner_id: string | null
+          professor: string | null
+          section_name: string
+        }
+        Insert: {
+          capacity?: number | null
+          course_id: string
+          created_at?: string
+          exam_date?: string | null
+          exam_end?: string | null
+          exam_start?: string | null
+          id?: string
+          location?: string | null
+          meetings?: Json
+          owner_id?: string | null
+          professor?: string | null
+          section_name: string
+        }
+        Update: {
+          capacity?: number | null
+          course_id?: string
+          created_at?: string
+          exam_date?: string | null
+          exam_end?: string | null
+          exam_start?: string | null
+          id?: string
+          location?: string | null
+          meetings?: Json
+          owner_id?: string | null
+          professor?: string | null
+          section_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_sections_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      courses: {
+        Row: {
+          code: string
+          corequisites: Json | null
+          course_type: string
+          created_at: string
+          credits: number
+          department: string | null
+          id: string
+          name_en: string
+          name_fa: string
+          owner_id: string | null
+          prerequisites: Json | null
+          repeatable: boolean
+        }
+        Insert: {
+          code: string
+          corequisites?: Json | null
+          course_type?: string
+          created_at?: string
+          credits?: number
+          department?: string | null
+          id?: string
+          name_en: string
+          name_fa: string
+          owner_id?: string | null
+          prerequisites?: Json | null
+          repeatable?: boolean
+        }
+        Update: {
+          code?: string
+          corequisites?: Json | null
+          course_type?: string
+          created_at?: string
+          credits?: number
+          department?: string | null
+          id?: string
+          name_en?: string
+          name_fa?: string
+          owner_id?: string | null
+          prerequisites?: Json | null
+          repeatable?: boolean
+        }
+        Relationships: []
+      }
+      plans: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          is_final: boolean
+          label: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          id?: string
+          is_final?: boolean
+          label?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          is_final?: boolean
+          label?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          degree: string | null
+          display_name: string | null
+          language: string
+          major: string | null
+          max_credits: number
+          min_credits: number
+          semester: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          degree?: string | null
+          display_name?: string | null
+          language?: string
+          major?: string | null
+          max_credits?: number
+          min_credits?: number
+          semester?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          degree?: string | null
+          display_name?: string | null
+          language?: string
+          major?: string | null
+          max_credits?: number
+          min_credits?: number
+          semester?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      student_courses: {
+        Row: {
+          course_code: string
+          created_at: string
+          id: string
+          note: string | null
+          override_eligible: boolean | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          course_code: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          override_eligible?: boolean | null
+          status: string
+          user_id: string
+        }
+        Update: {
+          course_code?: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          override_eligible?: boolean | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      student_preferences: {
+        Row: {
+          data: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          data?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          data?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
