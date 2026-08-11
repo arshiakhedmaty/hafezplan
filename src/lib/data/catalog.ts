@@ -31,8 +31,8 @@ export async function fetchCatalog(): Promise<Catalog> {
     department: row.department,
     courseType: row.course_type,
     repeatable: row.repeatable,
-    prerequisites: (row.prerequisites ?? null) as PrereqNode | null,
-    corequisites: (row.corequisites ?? null) as PrereqNode | null,
+    prerequisites: (row.prerequisites ?? null) as unknown as PrereqNode | null,
+    corequisites: (row.corequisites ?? null) as unknown as PrereqNode | null,
   }));
   const byId = new Map(courses.map((c) => [c.id, c]));
 
@@ -46,7 +46,7 @@ export async function fetchCatalog(): Promise<Catalog> {
       professor: row.professor,
       capacity: row.capacity,
       location: row.location,
-      meetings: (row.meetings ?? []) as Section["meetings"],
+      meetings: (row.meetings ?? []) as unknown as Section["meetings"],
       exam:
         row.exam_date && row.exam_start && row.exam_end
           ? { date: row.exam_date, start: row.exam_start, end: row.exam_end }
@@ -121,7 +121,7 @@ export async function savePreferences(userId: string, preferences: Preferences):
   const { error } = await supabase.from("student_preferences").upsert(
     {
       user_id: userId,
-      data: preferences as unknown as Record<string, unknown>,
+      data: preferences as unknown as never,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id" },
