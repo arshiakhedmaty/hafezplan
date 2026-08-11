@@ -174,7 +174,7 @@ function ChoiceChip({ active, onClick, label }: { active: boolean; onClick: () =
   );
 }
 
-function StatusBadge({ status }: { status?: string }) {
+function StatusBadge({ status }: { status: string | undefined }) {
   const { t } = useI18n();
   if (!status) return null;
   if (status === "passed" || status === "eligible") {
