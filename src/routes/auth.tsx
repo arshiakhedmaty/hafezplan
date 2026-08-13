@@ -66,7 +66,8 @@ function AuthPage() {
       }
       navigate({ to: target, replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
+      if (isConnectionError(error)) notifyConnectionIssue();
+      else toast.error(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
