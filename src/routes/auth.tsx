@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
+import { isConnectionError, notifyConnectionIssue } from "@/lib/connection";
 import { useI18n } from "@/lib/i18n";
 
 const searchSchema = z.object({ redirect: z.string().optional() });
