@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_authenticated")({
       }
       return { user: data.user };
     } catch (error) {
-      if (error != null && typeof error === "object" && "isRedirect" in error) throw error;
+      if (isRedirect(error)) throw error;
       if (isConnectionError(error)) {
         notifyConnectionIssue();
         const { data: sessionData } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
