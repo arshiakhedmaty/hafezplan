@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { lovable } from "@/integrations/lovable";
 import { supabase } from "@/integrations/supabase/client";
+import { isConnectionError, notifyConnectionIssue } from "@/lib/connection";
 import { useI18n } from "@/lib/i18n";
 
 const searchSchema = z.object({ redirect: z.string().optional() });
@@ -66,7 +67,8 @@ function AuthPage() {
       }
       navigate({ to: target, replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
+      if (isConnectionError(error)) notifyConnectionIssue();
+      else toast.error(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
@@ -83,7 +85,8 @@ function AuthPage() {
       if (result.redirected) return;
       navigate({ to: target, replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
+      if (isConnectionError(error)) notifyConnectionIssue();
+      else toast.error(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
