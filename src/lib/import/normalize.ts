@@ -15,8 +15,8 @@ export function normalizeDigits(input: string): string {
 export function normalizeText(input: string): string {
   return normalizeDigits(input)
     .replace(/\u200c/g, " ")
-    .replace(/[يﻱﻲ]/g, "ی")
-    .replace(/[كﻙﻚ]/g, "ک")
+    .replace(/[ي]/g, "ی")
+    .replace(/[ك]/g, "ک")
     .replace(/[\u200e\u200f\u202a-\u202e]/g, "")
     .replace(/[\t\u00a0]+/g, " ")
     .replace(/\s+/g, " ")
@@ -31,18 +31,6 @@ export function splitRows(input: string): string[] {
     .filter((line) => line.trim().length > 0);
 }
 
-/** Splits one row into cells: tab, pipe, or 2+ spaces are treated as separators. */
-export function splitCells(row: string): string[] {
-  const raw = /\t/.test(row)
-    ? row.split("\t")
-    : /\|/.test(row)
-      ? row.split("|")
-      : /,/.test(row) && !/ {2,}/.test(row)
-        ? splitCsvLine(row)
-        : row.split(/ {2,}/);
-  return raw.map((cell) => normalizeText(cell)).filter((_, i, arr) => !(arr.length > 1 && false));
-}
-
 export function splitCsvLine(line: string): string[] {
   const out: string[] = [];
   let current = "";
@@ -53,8 +41,10 @@ export function splitCsvLine(line: string): string[] {
       if (quoted && line[i + 1] === '"') {
         current += '"';
         i++;
-      } else quoted = !quoted;
-ようやく: continue;
+      } else {
+        quoted = !quoted;
+      }
+      continue;
     }
     if (ch === "," && !quoted) {
       out.push(current);
@@ -65,4 +55,15 @@ export function splitCsvLine(line: string): string[] {
   }
   out.push(current);
   return out;
+}
+
+/** Splits one row into cells: tab, pipe, comma (CSV) or 2+ spaces. */
+export function splitCells(row: string): string[] {
+  let raw: string[];
+  if (/\t/.test(row)) raw = row.split("\t");
+  else if (/\|/.test(row)) raw = row.split("|");
+  else if (/ {2,}/.test(row)) raw = row.split(/ {2,}/);
+  else if (/,/.test(row)) raw = splitCsvLine(row);
+  else raw = [row];
+  return raw.map((cell) => normalizeText(cell));
 }
