@@ -8,6 +8,21 @@ export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export const WEEKDAYS: Weekday[] = [0, 1, 2, 3, 4, 5, 6];
 
+/** University week: Saturday..Wednesday. Thursday and Friday are always off. */
+export const CLASS_DAYS: number[] = [0, 1, 2, 3, 4];
+
+/** Hard bounds of the teaching day. */
+export const DAY_START = "07:45";
+export const DAY_END = "20:00";
+
+/** Selectable minutes for blocked-time pickers. */
+export const MINUTE_STEPS = [0, 15, 30, 45];
+
+export const MIN_CREDITS = 12;
+export const MAX_CREDITS = 24;
+
+export type Gender = "male" | "female" | "mixed";
+
 export interface Meeting {
   day: number;
   /** "HH:MM" 24h */
@@ -17,7 +32,8 @@ export interface Meeting {
 }
 
 export interface ExamSlot {
-  date: string; // YYYY-MM-DD
+  /** As written in the university table (usually a Jalali date). */
+  date: string;
   start: string;
   end: string;
 }
@@ -45,6 +61,8 @@ export interface Section {
   courseId: string;
   courseCode: string;
   sectionName: string;
+  groupNumber?: string | null;
+  gender: Gender;
   professor?: string | null;
   capacity?: number | null;
   location?: string | null;
@@ -52,70 +70,31 @@ export interface Section {
   exam?: ExamSlot | null;
 }
 
-export type StudentCourseStatus = "passed" | "current" | "failed" | "required" | "avoid";
+/** The only three choices a student makes per course. */
+export type CoursePreference = "take" | "neutral" | "skip";
 
-export interface StudentState {
-  passed: string[];
-  current: string[];
-  failed: string[];
-  required: string[];
-  avoid: string[];
-  /** courseCode -> forced eligible/ineligible, set manually by the student. */
-  overrides: Record<string, boolean>;
-}
-
-export const emptyStudentState = (): StudentState => ({
-  passed: [],
-  current: [],
-  failed: [],
-  required: [],
-  avoid: [],
-  overrides: {},
-});
+export type CoursePreferenceMap = Record<string, CoursePreference>;
 
 export interface Preferences {
   minCredits: number;
   maxCredits: number;
   /** Times the student is never available. */
   blockedTimes: Meeting[];
-  /** Soft: courseCode -> professor name. */
-  preferredProfessors: Record<string, string>;
-  /** Soft: days the student would rather keep free. */
-  preferredFreeDays: number[];
-  /** Soft: days the student would rather avoid. */
-  avoidDays: number[];
-  /** Soft: "HH:MM" — dislikes classes starting before this. */
-  noEarlierThan?: string | null;
-  /** Soft: "HH:MM" — dislikes classes ending after this. */
-  noLaterThan?: string | null;
-  /** Soft: prefers at most this many class days. */
-  maxClassDays?: number | null;
+  /** Student gender; drives which sections are allowed. */
+  gender: "male" | "female" | null;
 }
 
 export const defaultPreferences = (): Preferences => ({
-  minCredits: 12,
-  maxCredits: 20,
+  minCredits: MIN_CREDITS,
+  maxCredits: MAX_CREDITS,
   blockedTimes: [],
-  preferredProfessors: {},
-  preferredFreeDays: [],
-  avoidDays: [],
-  noEarlierThan: null,
-  noLaterThan: null,
-  maxClassDays: null,
+  gender: null,
 });
 
-/**
- * Refinements are hard filters chosen by the student while browsing results.
- * They genuinely change the scheduling problem (not just the displayed list).
- */
+/** Hard filters chosen while browsing results. */
 export type Refinement =
   | { kind: "professor"; courseCode: string; professor: string }
   | { kind: "section"; courseCode: string; sectionId: string; label: string }
-  | { kind: "freeDay"; day: number }
-  | { kind: "courseDay"; courseCode: string; day: number }
-  | { kind: "maxClassDays"; value: number }
-  | { kind: "noEarlierThan"; time: string }
-  | { kind: "noLaterThan"; time: string }
   | { kind: "includeCourse"; courseCode: string }
   | { kind: "excludeCourse"; courseCode: string };
 
@@ -133,7 +112,26 @@ export interface Plan {
   earliestStart: string;
   latestEnd: string;
   score: number;
-  /** 0..100 how well soft preferences are met. */
-  match: number;
-  matchedPreferences: string[];
 }
+
+/* ---- legacy student-record types, kept for the eligibility helpers ---- */
+
+export type StudentCourseStatus = "passed" | "current" | "failed" | "required" | "avoid";
+
+export interface StudentState {
+  passed: string[];
+  current: string[];
+  failed: string[];
+  required: string[];
+  avoid: string[];
+  overrides: Record<string, boolean>;
+}
+
+export const emptyStudentState = (): StudentState => ({
+  passed: [],
+  current: [],
+  failed: [],
+  required: [],
+  avoid: [],
+  overrides: {},
+});

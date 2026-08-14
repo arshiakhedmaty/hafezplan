@@ -1,104 +1,141 @@
-import { evaluateEligibility, type CourseEligibility } from "./eligibility";
 import { examsOverlap, meetingSetsConflict, meetingsOverlap, toMinutes } from "./time";
-import type { Course, Plan, PlanEntry, Preferences, Refinement, Section, StudentState } from "./types";
+import {
+  CLASS_DAYS,
+  DAY_END,
+  DAY_START,
+  type Course,
+  type CoursePreferenceMap,
+  type Plan,
+  type PlanEntry,
+  type Preferences,
+  type Refinement,
+  type Section,
+} from "./types";
 
 export const MAX_CANDIDATE_PLANS = 100;
-/** Safety valves so the search never explodes on large catalogs. */
 const MAX_RAW_SOLUTIONS = 4000;
 const MAX_NODES = 400_000;
 
 export interface SolveInput {
   courses: Course[];
   sections: Section[];
-  student: StudentState;
+  /** courseCode -> take | neutral | skip */
+  coursePreferences: CoursePreferenceMap;
   preferences: Preferences;
   refinements: Refinement[];
 }
 
 export type BlockReason =
-  | { kind: "required_not_eligible"; courseCode: string; detail: CourseEligibility }
-  | { kind: "required_over_max"; credits: number; max: number }
-  | { kind: "required_class_conflict"; a: string; b: string }
-  | { kind: "required_exam_conflict"; a: string; b: string }
-  | { kind: "required_blocked_by_personal_time"; courseCode: string }
-  | { kind: "refinement_too_strict" }
+  | { kind: "no_courses" }
+  | { kind: "take_no_valid_section"; courseCode: string }
+  | { kind: "take_over_max"; credits: number; max: number }
   | { kind: "not_enough_credits"; available: number; min: number }
-  | { kind: "no_eligible_courses" };
+  | { kind: "take_class_conflict"; a: string; b: string }
+  | { kind: "take_exam_conflict"; a: string; b: string }
+  | { kind: "refinement_too_strict" };
 
 export interface SolveResult {
   plans: Plan[];
-  /** Real number of distinct valid schedules found before diversity capping. */
   totalFound: number;
   truncated: boolean;
-  eligibility: CourseEligibility[];
   blockers: BlockReason[];
 }
 
 interface CourseOption {
   course: Course;
   sections: Section[];
-  required: boolean;
+  mandatory: boolean;
+}
+
+/** A section is usable only if it satisfies every hard constraint on its own. */
+export function isSectionAllowed(
+  section: Section,
+  preferences: Preferences,
+  refinements: Refinement[] = [],
+): boolean {
+  if (preferences.gender === "male" && section.gender === "female") return false;
+  if (preferences.gender === "female" && section.gender === "male") return false;
+
+  const dayStart = toMinutes(DAY_START);
+  const dayEnd = toMinutes(DAY_END);
+
+  for (const meeting of section.meetings) {
+    if (!CLASS_DAYS.includes(meeting.day)) return false;
+    if (toMinutes(meeting.start) < dayStart) return false;
+    if (toMinutes(meeting.end) > dayEnd) return false;
+    if (toMinutes(meeting.end) <= toMinutes(meeting.start)) return false;
+    for (const blocked of preferences.blockedTimes) {
+      if (meetingsOverlap(meeting, blocked)) return false;
+    }
+  }
+
+  for (const refinement of refinements) {
+    if (refinement.kind === "professor" && refinement.courseCode === section.courseCode) {
+      if ((section.professor ?? "") !== refinement.professor) return false;
+    }
+    if (refinement.kind === "section" && refinement.courseCode === section.courseCode) {
+      if (section.id !== refinement.sectionId) return false;
+    }
+  }
+
+  return true;
 }
 
 export function solve(input: SolveInput): SolveResult {
-  const { courses, sections, student, preferences, refinements } = input;
-  const eligibility = evaluateEligibility({ courses, sections, student });
+  const { courses, sections, coursePreferences, preferences, refinements } = input;
   const blockers: BlockReason[] = [];
 
-  const byCode = new Map(eligibility.map((e) => [e.course.code, e]));
-
-  const includeOnly = refinements
-    .filter((r): r is Extract<Refinement, { kind: "includeCourse" }> => r.kind === "includeCourse")
-    .map((r) => r.courseCode);
-  const excluded = new Set(
-    refinements
-      .filter((r): r is Extract<Refinement, { kind: "excludeCourse" }> => r.kind === "excludeCourse")
-      .map((r) => r.courseCode),
+  const forcedInclude = new Set(
+    refinements.filter((r) => r.kind === "includeCourse").map((r) => r.courseCode),
+  );
+  const forcedExclude = new Set(
+    refinements.filter((r) => r.kind === "excludeCourse").map((r) => r.courseCode),
   );
 
-  // Required courses must be eligible.
-  for (const code of student.required) {
-    const detail = byCode.get(code);
-    if (!detail || detail.status !== "eligible") {
-      if (detail) blockers.push({ kind: "required_not_eligible", courseCode: code, detail });
-    }
+  const sectionsByCourse = new Map<string, Section[]>();
+  for (const section of sections) {
+    const list = sectionsByCourse.get(section.courseCode) ?? [];
+    list.push(section);
+    sectionsByCourse.set(section.courseCode, list);
   }
 
   const options: CourseOption[] = [];
-  for (const entry of eligibility) {
-    if (entry.status !== "eligible") continue;
-    if (excluded.has(entry.course.code)) continue;
-    const filtered = filterSections(entry.sections, entry.course, preferences, refinements);
-    const required = entry.required || includeOnly.includes(entry.course.code);
-    if (filtered.length === 0) {
-      if (required) {
-        blockers.push({ kind: "required_blocked_by_personal_time", courseCode: entry.course.code });
-      }
+  for (const course of courses) {
+    const preference = coursePreferences[course.code] ?? "neutral";
+    if (preference === "skip") continue;
+    if (forcedExclude.has(course.code)) continue;
+
+    const mandatory = preference === "take" || forcedInclude.has(course.code);
+    const usable = (sectionsByCourse.get(course.code) ?? []).filter((s) =>
+      isSectionAllowed(s, preferences, refinements),
+    );
+
+    if (usable.length === 0) {
+      if (mandatory) blockers.push({ kind: "take_no_valid_section", courseCode: course.code });
       continue;
     }
-    options.push({ course: entry.course, sections: filtered, required });
+    options.push({ course, sections: usable, mandatory });
   }
 
   if (options.length === 0) {
-    blockers.push({ kind: "no_eligible_courses" });
-    return { plans: [], totalFound: 0, truncated: false, eligibility, blockers };
+    blockers.push({ kind: "no_courses" });
+    return { plans: [], totalFound: 0, truncated: false, blockers };
   }
 
-  const requiredOptions = options.filter((o) => o.required);
-  const requiredCredits = requiredOptions.reduce((sum, o) => sum + o.course.credits, 0);
-  if (requiredCredits > preferences.maxCredits) {
-    blockers.push({ kind: "required_over_max", credits: requiredCredits, max: preferences.maxCredits });
+  const mandatoryOptions = options.filter((o) => o.mandatory);
+  const mandatoryCredits = mandatoryOptions.reduce((sum, o) => sum + o.course.credits, 0);
+  if (mandatoryCredits > preferences.maxCredits) {
+    blockers.push({ kind: "take_over_max", credits: mandatoryCredits, max: preferences.maxCredits });
   }
   const availableCredits = options.reduce((sum, o) => sum + o.course.credits, 0);
   if (availableCredits < preferences.minCredits) {
     blockers.push({ kind: "not_enough_credits", available: availableCredits, min: preferences.minCredits });
   }
 
-  // Pairwise impossibility among required courses (all section combos conflict).
-  for (let i = 0; i < requiredOptions.length; i++) {
-    for (let j = i + 1; j < requiredOptions.length; j++) {
-      const a = requiredOptions[i]!;
-      const b = requiredOptions[j]!;
+  for (let i = 0; i < mandatoryOptions.length; i++) {
+    for (let j = i + 1; j < mandatoryOptions.length; j++) {
+      const a = mandatoryOptions[i]!;
+      const b = mandatoryOptions[j]!;
       let classOk = false;
       let examOk = false;
       for (const sa of a.sections) {
@@ -107,53 +144,40 @@ export function solve(input: SolveInput): SolveResult {
           if (!examsOverlap(sa.exam, sb.exam)) examOk = true;
         }
       }
-      if (!classOk) blockers.push({ kind: "required_class_conflict", a: a.course.code, b: b.course.code });
-      else if (!examOk) blockers.push({ kind: "required_exam_conflict", a: a.course.code, b: b.course.code });
+      if (!classOk) blockers.push({ kind: "take_class_conflict", a: a.course.code, b: b.course.code });
+      else if (!examOk) blockers.push({ kind: "take_exam_conflict", a: a.course.code, b: b.course.code });
     }
   }
 
   if (blockers.length > 0) {
-    return { plans: [], totalFound: 0, truncated: false, eligibility, blockers };
+    return { plans: [], totalFound: 0, truncated: false, blockers };
   }
 
-  const maxClassDays = maxClassDaysRefinement(refinements);
-  const forcedFreeDays = refinements
-    .filter((r): r is Extract<Refinement, { kind: "freeDay" }> => r.kind === "freeDay")
-    .map((r) => r.day);
-
-  // Order: required first, then fewest sections (most constrained), then most credits.
+  // Most constrained first keeps the search small.
   const ordered = [...options].sort((a, b) => {
-    if (a.required !== b.required) return a.required ? -1 : 1;
+    if (a.mandatory !== b.mandatory) return a.mandatory ? -1 : 1;
     if (a.sections.length !== b.sections.length) return a.sections.length - b.sections.length;
     return b.course.credits - a.course.credits;
   });
 
   const suffixCredits: number[] = new Array(ordered.length + 1).fill(0);
+  const suffixMandatory: number[] = new Array(ordered.length + 1).fill(0);
   for (let i = ordered.length - 1; i >= 0; i--) {
     suffixCredits[i] = suffixCredits[i + 1]! + ordered[i]!.course.credits;
-  }
-  const suffixRequired: number[] = new Array(ordered.length + 1).fill(0);
-  for (let i = ordered.length - 1; i >= 0; i--) {
-    suffixRequired[i] = suffixRequired[i + 1]! + (ordered[i]!.required ? ordered[i]!.course.credits : 0);
+    suffixMandatory[i] = suffixMandatory[i + 1]! + (ordered[i]!.mandatory ? ordered[i]!.course.credits : 0);
   }
 
   const solutions: Section[][] = [];
+  const chosen: Section[] = [];
   let nodes = 0;
   let truncated = false;
-  const chosen: Section[] = [];
 
-  const conflictsWithChosen = (section: Section): boolean => {
+  const conflicts = (section: Section): boolean => {
     for (const s of chosen) {
       if (meetingSetsConflict(s.meetings, section.meetings)) return true;
       if (examsOverlap(s.exam, section.exam)) return true;
     }
     return false;
-  };
-
-  const daysUsed = (): Set<number> => {
-    const set = new Set<number>();
-    for (const s of chosen) for (const m of s.meetings) set.add(m.day);
-    return set;
   };
 
   const recurse = (index: number, credits: number): void => {
@@ -162,107 +186,48 @@ export function solve(input: SolveInput): SolveResult {
       truncated = true;
       return;
     }
-    if (credits >= preferences.minCredits && credits <= preferences.maxCredits && chosen.length > 0) {
+    if (
+      index >= ordered.length &&
+      credits >= preferences.minCredits &&
+      credits <= preferences.maxCredits
+    ) {
       solutions.push([...chosen]);
-      if (solutions.length >= MAX_RAW_SOLUTIONS) {
-        truncated = true;
-        return;
-      }
+      if (solutions.length >= MAX_RAW_SOLUTIONS) truncated = true;
+      return;
     }
     if (index >= ordered.length) return;
-    // Prune: can we still reach the minimum?
     if (credits + suffixCredits[index]! < preferences.minCredits) return;
-    // Prune: remaining required courses would blow the maximum.
-    if (credits + suffixRequired[index]! > preferences.maxCredits) return;
+    if (credits + suffixMandatory[index]! > preferences.maxCredits) return;
 
     const option = ordered[index]!;
     const nextCredits = credits + option.course.credits;
     if (nextCredits <= preferences.maxCredits) {
       for (const section of option.sections) {
-        if (conflictsWithChosen(section)) continue;
-        if (forcedFreeDays.length || maxClassDays !== null) {
-          const days = daysUsed();
-          for (const m of section.meetings) days.add(m.day);
-          if (forcedFreeDays.some((d) => days.has(d))) continue;
-          if (maxClassDays !== null && days.size > maxClassDays) continue;
-        }
+        if (conflicts(section)) continue;
         chosen.push(section);
         recurse(index + 1, nextCredits);
         chosen.pop();
         if (truncated) return;
       }
     }
-    if (!option.required) recurse(index + 1, credits);
+    // Optional courses may also be left out.
+    if (!option.mandatory) recurse(index + 1, credits);
   };
 
   recurse(0, 0);
 
-  const scored = solutions.map((sections, i) => buildPlan(String(i), sections, options, preferences));
-  scored.sort((a, b) => b.score - a.score || a.entries.length - b.entries.length);
+  const plans = solutions
+    .map((combo, i) => buildPlan(`plan-${i}`, combo, options, preferences))
+    .sort((a, b) => b.score - a.score);
 
-  const diverse = diversify(scored, MAX_CANDIDATE_PLANS);
+  const diversified = diversify(plans, MAX_CANDIDATE_PLANS);
 
   return {
-    plans: diverse.map((plan, index) => ({ ...plan, id: `plan-${index + 1}` })),
-    totalFound: scored.length,
-    truncated,
-    eligibility,
-    blockers,
+    plans: diversified,
+    totalFound: plans.length,
+    truncated: truncated || plans.length > diversified.length,
+    blockers: plans.length === 0 ? [{ kind: "refinement_too_strict" }] : [],
   };
-}
-
-function maxClassDaysRefinement(refinements: Refinement[]): number | null {
-  let value: number | null = null;
-  for (const r of refinements) {
-    if (r.kind === "maxClassDays") value = value === null ? r.value : Math.min(value, r.value);
-  }
-  return value;
-}
-
-function filterSections(
-  sections: Section[],
-  course: Course,
-  preferences: Preferences,
-  refinements: Refinement[],
-): Section[] {
-  const professorPick = refinements.find(
-    (r): r is Extract<Refinement, { kind: "professor" }> =>
-      r.kind === "professor" && r.courseCode === course.code,
-  );
-  const sectionPick = refinements.find(
-    (r): r is Extract<Refinement, { kind: "section" }> =>
-      r.kind === "section" && r.courseCode === course.code,
-  );
-  const dayPick = refinements.filter(
-    (r): r is Extract<Refinement, { kind: "courseDay" }> =>
-      r.kind === "courseDay" && r.courseCode === course.code,
-  );
-  const earliest = refinements
-    .filter((r): r is Extract<Refinement, { kind: "noEarlierThan" }> => r.kind === "noEarlierThan")
-    .map((r) => toMinutes(r.time));
-  const latest = refinements
-    .filter((r): r is Extract<Refinement, { kind: "noLaterThan" }> => r.kind === "noLaterThan")
-    .map((r) => toMinutes(r.time));
-  const freeDays = refinements
-    .filter((r): r is Extract<Refinement, { kind: "freeDay" }> => r.kind === "freeDay")
-    .map((r) => r.day);
-  const minStart = earliest.length ? Math.max(...earliest) : null;
-  const maxEnd = latest.length ? Math.min(...latest) : null;
-
-  return sections.filter((section) => {
-    if (professorPick && (section.professor ?? "") !== professorPick.professor) return false;
-    if (sectionPick && section.id !== sectionPick.sectionId) return false;
-    if (dayPick.length && !dayPick.every((d) => section.meetings.some((m) => m.day === d.day))) return false;
-    for (const m of section.meetings) {
-      if (freeDays.includes(m.day)) return false;
-      if (minStart !== null && toMinutes(m.start) < minStart) return false;
-      if (maxEnd !== null && toMinutes(m.end) > maxEnd) return false;
-      for (const blocked of preferences.blockedTimes) {
-        if (meetingsOverlap(m, blocked)) return false;
-      }
-    }
-    return true;
-  });
 }
 
 function buildPlan(
@@ -277,20 +242,24 @@ function buildPlan(
     course: courseByCode.get(section.courseCode)!,
   }));
   const credits = entries.reduce((sum, e) => sum + e.course.credits, 0);
+
   const dayset = new Set<number>();
   let earliest = Infinity;
   let latest = -Infinity;
-  for (const e of entries) {
-    for (const m of e.section.meetings) {
-      dayset.add(m.day);
-      earliest = Math.min(earliest, toMinutes(m.start));
-      latest = Math.max(latest, toMinutes(m.end));
+  for (const entry of entries) {
+    for (const meeting of entry.section.meetings) {
+      dayset.add(meeting.day);
+      earliest = Math.min(earliest, toMinutes(meeting.start));
+      latest = Math.max(latest, toMinutes(meeting.end));
     }
   }
   const classDays = [...dayset].sort((a, b) => a - b);
-  const freeDays = [0, 1, 2, 3, 4, 5, 6].filter((d) => !dayset.has(d));
+  const freeDays = CLASS_DAYS.filter((d) => !dayset.has(d));
 
-  const { score, match, matched } = scorePlan(entries, classDays, freeDays, credits, preferences);
+  // Soft ranking only: fuller, tighter, fewer-day schedules float to the top.
+  const mid = (preferences.minCredits + preferences.maxCredits) / 2;
+  const score =
+    credits * 0.6 - Math.abs(credits - mid) * 0.3 + freeDays.length * 1.5 - (latest - earliest) / 240;
 
   return {
     id,
@@ -300,9 +269,7 @@ function buildPlan(
     freeDays,
     earliestStart: earliest === Infinity ? "--:--" : minutesToLabel(earliest),
     latestEnd: latest === -Infinity ? "--:--" : minutesToLabel(latest),
-    score,
-    match,
-    matchedPreferences: matched,
+    score: Number.isFinite(score) ? score : 0,
   };
 }
 
@@ -312,93 +279,7 @@ function minutesToLabel(mins: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-function scorePlan(
-  entries: PlanEntry[],
-  classDays: number[],
-  freeDays: number[],
-  credits: number,
-  preferences: Preferences,
-): { score: number; match: number; matched: string[] } {
-  let score = 0;
-  let possible = 0;
-  let satisfied = 0;
-  const matched: string[] = [];
-
-  for (const [code, professor] of Object.entries(preferences.preferredProfessors)) {
-    if (!professor) continue;
-    const entry = entries.find((e) => e.course.code === code);
-    if (!entry) continue;
-    possible += 1;
-    if ((entry.section.professor ?? "") === professor) {
-      satisfied += 1;
-      score += 6;
-      matched.push(`professor:${code}`);
-    }
-  }
-
-  for (const day of preferences.preferredFreeDays) {
-    possible += 1;
-    if (freeDays.includes(day)) {
-      satisfied += 1;
-      score += 5;
-      matched.push(`freeDay:${day}`);
-    }
-  }
-
-  for (const day of preferences.avoidDays) {
-    possible += 1;
-    if (!classDays.includes(day)) {
-      satisfied += 1;
-      score += 4;
-      matched.push(`avoidDay:${day}`);
-    } else {
-      score -= 3;
-    }
-  }
-
-  if (preferences.noEarlierThan) {
-    possible += 1;
-    const limit = toMinutes(preferences.noEarlierThan);
-    const violations = entries.flatMap((e) => e.section.meetings).filter((m) => toMinutes(m.start) < limit);
-    if (violations.length === 0) {
-      satisfied += 1;
-      score += 4;
-      matched.push("noEarlierThan");
-    } else score -= violations.length;
-  }
-
-  if (preferences.noLaterThan) {
-    possible += 1;
-    const limit = toMinutes(preferences.noLaterThan);
-    const violations = entries.flatMap((e) => e.section.meetings).filter((m) => toMinutes(m.end) > limit);
-    if (violations.length === 0) {
-      satisfied += 1;
-      score += 4;
-      matched.push("noLaterThan");
-    } else score -= violations.length;
-  }
-
-  if (preferences.maxClassDays) {
-    possible += 1;
-    if (classDays.length <= preferences.maxClassDays) {
-      satisfied += 1;
-      score += 4;
-      matched.push("maxClassDays");
-    }
-  }
-
-  // Gentle structural preferences, always applied.
-  score += (7 - classDays.length) * 0.5;
-  score += credits * 0.2;
-
-  const match = possible === 0 ? 100 : Math.round((satisfied / possible) * 100);
-  return { score, match, matched };
-}
-
-/**
- * Removes near-duplicate schedules so the student sees meaningfully different
- * options instead of dozens of almost identical ones.
- */
+/** Removes near-duplicate schedules so the student sees genuinely different options. */
 export function diversify(plans: Plan[], limit: number): Plan[] {
   const seenExact = new Set<string>();
   const seenShape = new Set<string>();
