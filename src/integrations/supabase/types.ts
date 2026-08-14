@@ -55,6 +55,7 @@ export type Database = {
           course_id: string
           created_at: string
           exam_date: string | null
+          exam_date_label: string | null
           exam_end: string | null
           exam_start: string | null
           gender: string
@@ -72,6 +73,7 @@ export type Database = {
           course_id: string
           created_at?: string
           exam_date?: string | null
+          exam_date_label?: string | null
           exam_end?: string | null
           exam_start?: string | null
           gender?: string
@@ -89,6 +91,7 @@ export type Database = {
           course_id?: string
           created_at?: string
           exam_date?: string | null
+          exam_date_label?: string | null
           exam_end?: string | null
           exam_start?: string | null
           gender?: string

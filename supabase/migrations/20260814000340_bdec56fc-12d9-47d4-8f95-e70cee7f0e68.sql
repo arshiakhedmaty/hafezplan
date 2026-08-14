@@ -1,0 +1,1 @@
+ALTER TABLE public.course_sections ADD COLUMN IF NOT EXISTS exam_date_label text;
