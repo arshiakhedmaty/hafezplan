@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      course_preferences: {
+        Row: {
+          course_id: string
+          created_at: string
+          id: string
+          preference: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          id?: string
+          preference?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          id?: string
+          preference?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_preferences_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       course_sections: {
         Row: {
           capacity: number | null
@@ -22,7 +57,10 @@ export type Database = {
           exam_date: string | null
           exam_end: string | null
           exam_start: string | null
+          gender: string
+          group_number: string | null
           id: string
+          import_id: string | null
           location: string | null
           meetings: Json
           owner_id: string | null
@@ -36,7 +74,10 @@ export type Database = {
           exam_date?: string | null
           exam_end?: string | null
           exam_start?: string | null
+          gender?: string
+          group_number?: string | null
           id?: string
+          import_id?: string | null
           location?: string | null
           meetings?: Json
           owner_id?: string | null
@@ -50,7 +91,10 @@ export type Database = {
           exam_date?: string | null
           exam_end?: string | null
           exam_start?: string | null
+          gender?: string
+          group_number?: string | null
           id?: string
+          import_id?: string | null
           location?: string | null
           meetings?: Json
           owner_id?: string | null
@@ -65,6 +109,13 @@ export type Database = {
             referencedRelation: "courses"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "course_sections_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "imports"
+            referencedColumns: ["id"]
+          },
         ]
       }
       courses: {
@@ -76,6 +127,7 @@ export type Database = {
           credits: number
           department: string | null
           id: string
+          import_id: string | null
           name_en: string
           name_fa: string
           owner_id: string | null
@@ -90,6 +142,7 @@ export type Database = {
           credits?: number
           department?: string | null
           id?: string
+          import_id?: string | null
           name_en: string
           name_fa: string
           owner_id?: string | null
@@ -104,11 +157,50 @@ export type Database = {
           credits?: number
           department?: string | null
           id?: string
+          import_id?: string | null
           name_en?: string
           name_fa?: string
           owner_id?: string | null
           prerequisites?: Json | null
           repeatable?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "courses_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      imports: {
+        Row: {
+          created_at: string
+          id: string
+          raw_input: string
+          source_type: string
+          stats: Json
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          raw_input?: string
+          source_type?: string
+          stats?: Json
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          raw_input?: string
+          source_type?: string
+          stats?: Json
+          status?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -144,6 +236,7 @@ export type Database = {
           created_at: string
           degree: string | null
           display_name: string | null
+          gender: string | null
           language: string
           major: string | null
           max_credits: number
@@ -156,6 +249,7 @@ export type Database = {
           created_at?: string
           degree?: string | null
           display_name?: string | null
+          gender?: string | null
           language?: string
           major?: string | null
           max_credits?: number
@@ -168,6 +262,7 @@ export type Database = {
           created_at?: string
           degree?: string | null
           display_name?: string | null
+          gender?: string | null
           language?: string
           major?: string | null
           max_credits?: number
