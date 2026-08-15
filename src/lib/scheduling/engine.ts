@@ -218,8 +218,10 @@ export function solve(input: SolveInput): SolveResult {
 
   const plans = solutions
     .map((combo, i) => buildPlan(`plan-${i}`, combo, options, preferences))
+    .filter((plan) => matchesPlanRefinements(plan, refinements))
     .sort((a, b) => b.score - a.score);
 
+  withMatchScores(plans);
   const diversified = diversify(plans, MAX_CANDIDATE_PLANS);
 
   return {
@@ -228,6 +230,33 @@ export function solve(input: SolveInput): SolveResult {
     truncated: truncated || plans.length > diversified.length,
     blockers: plans.length === 0 ? [{ kind: "refinement_too_strict" }] : [],
   };
+}
+
+/** Refinements that can only be judged once a whole schedule exists. */
+function matchesPlanRefinements(plan: Plan, refinements: Refinement[]): boolean {
+  for (const refinement of refinements) {
+    if (refinement.kind === "freeDay" && !plan.freeDays.includes(refinement.day)) return false;
+    if (refinement.kind === "maxClassDays" && plan.classDays.length > refinement.value) return false;
+    if (refinement.kind === "includeCourse") {
+      if (!plan.entries.some((e) => e.course.code === refinement.courseCode)) return false;
+    }
+    if (refinement.kind === "excludeCourse") {
+      if (plan.entries.some((e) => e.course.code === refinement.courseCode)) return false;
+    }
+  }
+  return true;
+}
+
+/** Turns raw scores into a 0–100 display value relative to the best plan found. */
+function withMatchScores(plans: Plan[]): void {
+  if (plans.length === 0) return;
+  const scores = plans.map((p) => p.score);
+  const max = Math.max(...scores);
+  const min = Math.min(...scores);
+  const span = max - min;
+  for (const plan of plans) {
+    plan.match = span <= 0 ? 100 : Math.round(60 + ((plan.score - min) / span) * 40);
+  }
 }
 
 function buildPlan(
