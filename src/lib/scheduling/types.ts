@@ -96,7 +96,9 @@ export type Refinement =
   | { kind: "professor"; courseCode: string; professor: string }
   | { kind: "section"; courseCode: string; sectionId: string; label: string }
   | { kind: "includeCourse"; courseCode: string }
-  | { kind: "excludeCourse"; courseCode: string };
+  | { kind: "excludeCourse"; courseCode: string }
+  | { kind: "freeDay"; day: number }
+  | { kind: "maxClassDays"; value: number };
 
 export interface PlanEntry {
   section: Section;
@@ -112,6 +114,8 @@ export interface Plan {
   earliestStart: string;
   latestEnd: string;
   score: number;
+  /** 0–100 relative ranking, for display only. */
+  match: number;
 }
 
 /* ---- legacy student-record types, kept for the eligibility helpers ---- */

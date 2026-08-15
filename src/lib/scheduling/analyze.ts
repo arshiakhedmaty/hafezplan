@@ -1,4 +1,4 @@
-import type { Plan, Refinement } from "./types";
+import { CLASS_DAYS, type Plan, type Refinement } from "./types";
 
 export interface DifferenceOption {
   key: string;
@@ -10,7 +10,7 @@ export interface DifferenceOption {
 
 export interface DifferenceGroup {
   id: string;
-  type: "professor" | "freeDay" | "classDays" | "credits" | "courseDay";
+  type: "professor" | "freeDay" | "classDays" | "course";
   courseCode: string | null;
   options: DifferenceOption[];
 }
@@ -49,96 +49,63 @@ export function analyzeDifferences(plans: Plan[]): DifferenceGroup[] {
           key: `${code}:${professor}`,
           value: professor,
           count,
-          refinement: { kind: "professor", courseCode: code, professor } as Refinement,
+          refinement: { kind: "professor", courseCode: code, professor } satisfies Refinement,
         })),
     });
   }
 
-  // Free days that are free in some plans but not all
-  for (let day = 0; day < 7; day++) {
+  // Days that are free in some plans but not all
+  const freeDayOptions: DifferenceOption[] = [];
+  for (const day of CLASS_DAYS) {
     const withFree = plans.filter((p) => p.freeDays.includes(day)).length;
     if (withFree === 0 || withFree === plans.length) continue;
-    groups.push({
-      id: `freeDay:${day}`,
-      type: "freeDay",
-      courseCode: null,
-      options: [
-        {
-          key: `freeDay:${day}`,
-          value: day,
-          count: withFree,
-          refinement: { kind: "freeDay", day } as Refinement,
-        },
-      ],
+    freeDayOptions.push({
+      key: `freeDay:${day}`,
+      value: day,
+      count: withFree,
+      refinement: { kind: "freeDay", day } satisfies Refinement,
     });
+  }
+  if (freeDayOptions.length > 0) {
+    groups.push({ id: "freeDay", type: "freeDay", courseCode: null, options: freeDayOptions });
   }
 
   // Number of class days
-  const dayCounts = new Map<number, number>();
-  for (const plan of plans) dayCounts.set(plan.classDays.length, (dayCounts.get(plan.classDays.length) ?? 0) + 1);
-  if (dayCounts.size > 1) {
+  const dayLengths = new Set(plans.map((p) => p.classDays.length));
+  if (dayLengths.size > 1) {
     groups.push({
       id: "classDays",
       type: "classDays",
       courseCode: null,
-      options: [...dayCounts.entries()]
-        .sort((a, b) => a[0] - b[0])
-        .map(([value, count]) => ({
+      options: [...dayLengths]
+        .sort((a, b) => a - b)
+        .slice(0, 4)
+        .map((value) => ({
           key: `classDays:${value}`,
           value,
           count: plans.filter((p) => p.classDays.length <= value).length,
-          refinement: { kind: "maxClassDays", value } as Refinement,
-        }))
-        .slice(0, 3),
-    });
-  }
-
-  // Day a specific course lands on (only for courses in every plan)
-  for (const [code, appearances] of courseAppearance) {
-    if (appearances !== plans.length) continue;
-    const dayCount = new Map<number, number>();
-    for (const plan of plans) {
-      const entry = plan.entries.find((e) => e.course.code === code);
-      if (!entry) continue;
-      const days = new Set(entry.section.meetings.map((m) => m.day));
-      for (const d of days) dayCount.set(d, (dayCount.get(d) ?? 0) + 1);
-    }
-    if (dayCount.size < 2) continue;
-    if (professorsByCourse.get(code)?.size ?? 0 > 1) {
-      // professor group already communicates this difference
-    }
-    groups.push({
-      id: `courseDay:${code}`,
-      type: "courseDay",
-      courseCode: code,
-      options: [...dayCount.entries()]
-        .sort((a, b) => a[0] - b[0])
-        .map(([day, count]) => ({
-          key: `courseDay:${code}:${day}`,
-          value: day,
-          count,
-          refinement: { kind: "courseDay", courseCode: code, day } as Refinement,
+          refinement: { kind: "maxClassDays", value } satisfies Refinement,
         })),
     });
   }
 
-  // Credit loads
-  const creditCounts = new Map<number, number>();
-  for (const plan of plans) creditCounts.set(plan.credits, (creditCounts.get(plan.credits) ?? 0) + 1);
-  if (creditCounts.size > 1) {
+  // Optional courses present in some plans but not all
+  const optionalOptions: DifferenceOption[] = [];
+  for (const [code, appearances] of courseAppearance) {
+    if (appearances === plans.length) continue;
+    optionalOptions.push({
+      key: `include:${code}`,
+      value: code,
+      count: appearances,
+      refinement: { kind: "includeCourse", courseCode: code } satisfies Refinement,
+    });
+  }
+  if (optionalOptions.length > 0) {
     groups.push({
-      id: "credits",
-      type: "credits",
+      id: "course",
+      type: "course",
       courseCode: null,
-      options: [...creditCounts.entries()]
-        .sort((a, b) => b[0] - a[0])
-        .map(([value, count]) => ({
-          key: `credits:${value}`,
-          value,
-          count,
-          refinement: { kind: "maxClassDays", value: 7 } as Refinement,
-        }))
-        .slice(0, 4),
+      options: optionalOptions.sort((a, b) => b.count - a.count).slice(0, 8),
     });
   }
 
