@@ -299,6 +299,7 @@ function buildPlan(
     earliestStart: earliest === Infinity ? "--:--" : minutesToLabel(earliest),
     latestEnd: latest === -Infinity ? "--:--" : minutesToLabel(latest),
     score: Number.isFinite(score) ? score : 0,
+    match: 100,
   };
 }
 
