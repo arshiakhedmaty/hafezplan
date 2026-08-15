@@ -114,6 +114,8 @@ export interface Plan {
   earliestStart: string;
   latestEnd: string;
   score: number;
+  /** 0–100 relative ranking, for display only. */
+  match: number;
 }
 
 /* ---- legacy student-record types, kept for the eligibility helpers ---- */
