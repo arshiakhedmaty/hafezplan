@@ -1,50 +1,60 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { AlertTriangle, Check, CircleHelp, Search } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { AlertTriangle, FileUp, Loader2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
-import { useCatalog, useStudentState } from "@/lib/data/hooks";
+import { Textarea } from "@/components/ui/textarea";
+import { useCatalog, useCoursePreferences, useImport } from "@/lib/data/hooks";
 import { useI18n } from "@/lib/i18n";
-import { evaluateEligibility, type Course, type StudentState } from "@/lib/scheduling";
+import { parseTable } from "@/lib/import/parser";
+import type { ParseResult } from "@/lib/import/types";
+import type { Course, CoursePreference } from "@/lib/scheduling";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/setup")({
   head: () => ({
     meta: [
       { title: "Your courses — HafezPlan" },
-      { name: "description", content: "Mark passed, failed and must-take courses so HafezPlan can check prerequisites." },
+      {
+        name: "description",
+        content: "Import your university offerings table and choose which courses you want to take this semester.",
+      },
       { property: "og:title", content: "Your courses — HafezPlan" },
-      { property: "og:description", content: "Track your academic record for accurate semester planning." },
+      {
+        property: "og:description",
+        content: "Import the offerings table and mark each course as take, no preference, or skip.",
+      },
     ],
   }),
   component: SetupPage,
 });
 
-type Bucket = "passed" | "current" | "failed" | "required" | "avoid";
+const CHOICES: CoursePreference[] = ["take", "neutral", "skip"];
 
-const BUCKETS: Bucket[] = ["passed", "current", "failed", "required", "avoid"];
+const CHOICE_LABEL: Record<CoursePreference, "prefTake" | "prefNeutral" | "prefSkip"> = {
+  take: "prefTake",
+  neutral: "prefNeutral",
+  skip: "prefSkip",
+};
 
 function SetupPage() {
   const { t, lang, num } = useI18n();
   const catalog = useCatalog();
-  const { state, save } = useStudentState();
+  const { byCourseId, setPreference } = useCoursePreferences();
   const [query, setQuery] = useState("");
 
-  const eligibility = useMemo(() => {
-    if (!catalog.data) return [];
-    return evaluateEligibility({ courses: catalog.data.courses, sections: catalog.data.sections, student: state });
-  }, [catalog.data, state]);
-
-  const statusByCode = useMemo(
-    () => new Map(eligibility.map((e) => [e.course.code, e])),
-    [eligibility],
-  );
+  const courses = catalog.data?.courses ?? [];
+  const sectionCount = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const section of catalog.data?.sections ?? []) {
+      map.set(section.courseId, (map.get(section.courseId) ?? 0) + 1);
+    }
+    return map;
+  }, [catalog.data]);
 
   const filtered = useMemo(() => {
-    const courses = catalog.data?.courses ?? [];
     const q = query.trim().toLowerCase();
     if (!q) return courses;
     return courses.filter(
@@ -53,62 +63,45 @@ function SetupPage() {
         c.nameEn.toLowerCase().includes(q) ||
         c.nameFa.includes(query.trim()),
     );
-  }, [catalog.data, query]);
-
-  const setBucket = (code: string, bucket: Bucket | null) => {
-    const next: StudentState = {
-      ...state,
-      passed: state.passed.filter((c) => c !== code),
-      current: state.current.filter((c) => c !== code),
-      failed: state.failed.filter((c) => c !== code),
-      required: state.required.filter((c) => c !== code),
-      avoid: state.avoid.filter((c) => c !== code),
-      overrides: { ...state.overrides },
-    };
-    if (bucket) next[bucket] = [...next[bucket], code];
-    save(next);
-  };
-
-  const toggleOverride = (code: string, value: boolean) => {
-    const overrides = { ...state.overrides };
-    if (value) overrides[code] = true;
-    else delete overrides[code];
-    save({ ...state, overrides });
-  };
-
-  const bucketOf = (code: string): Bucket | null =>
-    BUCKETS.find((bucket) => (state[bucket] as string[]).includes(code)) ?? null;
+  }, [courses, query]);
 
   const courseName = (course: Course) => (lang === "fa" ? course.nameFa : course.nameEn);
 
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-3xl">{t("setupTitle")}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t("setupSubtitle")}</p>
+        <h1 className="text-3xl">{t("coursesTitle")}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t("coursesSubtitle")}</p>
       </header>
 
-      <div className="relative">
-        <Search className="pointer-events-none absolute inset-inline-start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t("searchCourses")}
-          className="ps-9"
-        />
-      </div>
+      <ImportPanel hasCatalog={courses.length > 0} />
+
+      {courses.length > 0 ? (
+        <div className="relative">
+          <Search className="pointer-events-none absolute inset-inline-start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("searchCourses")}
+            className="ps-9"
+          />
+        </div>
+      ) : null}
 
       {catalog.isLoading ? (
         <div className="space-y-3">
           {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-28 w-full rounded-xl" />
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
           ))}
         </div>
+      ) : courses.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border bg-card/50 p-6 text-center text-sm text-muted-foreground">
+          {t("noCatalog")}
+        </p>
       ) : (
         <ul className="space-y-3">
           {filtered.map((course) => {
-            const bucket = bucketOf(course.code);
-            const status = statusByCode.get(course.code);
+            const choice: CoursePreference = byCourseId[course.id] ?? "neutral";
             return (
               <li key={course.id} className="rounded-xl border border-border bg-card p-4 shadow-sm">
                 <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
@@ -118,30 +111,21 @@ function SetupPage() {
                       <span dir="ltr">{course.code}</span> · {num(course.credits)} {t("credits")}
                     </p>
                   </div>
-                  <StatusBadge status={status?.status} />
+                  <Badge variant="outline" className="shrink-0">
+                    {num(sectionCount.get(course.id) ?? 0)} {t("importedSections")}
+                  </Badge>
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  <ChoiceChip active={bucket === null} onClick={() => setBucket(course.code, null)} label={t("none")} />
-                  {BUCKETS.map((b) => (
+                  {CHOICES.map((value) => (
                     <ChoiceChip
-                      key={b}
-                      active={bucket === b}
-                      onClick={() => setBucket(course.code, b)}
-                      label={t(b)}
+                      key={value}
+                      active={choice === value}
+                      onClick={() => setPreference({ courseId: course.id, preference: value })}
+                      label={t(CHOICE_LABEL[value])}
                     />
                   ))}
                 </div>
-
-                {status?.status === "uncertain" || status?.status === "missing_prereq" ? (
-                  <label className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2">
-                    <span className="min-w-0 text-xs text-muted-foreground">{t("markEligible")}</span>
-                    <Switch
-                      checked={state.overrides[course.code] === true}
-                      onCheckedChange={(value) => toggleOverride(course.code, value)}
-                    />
-                  </label>
-                ) : null}
               </li>
             );
           })}
@@ -149,11 +133,119 @@ function SetupPage() {
       )}
 
       <div className="flex justify-end">
-        <Button asChild size="lg">
+        <Button asChild size="lg" disabled={courses.length === 0}>
           <Link to="/preferences">{t("continue")}</Link>
         </Button>
       </div>
     </div>
+  );
+}
+
+function ImportPanel({ hasCatalog }: { hasCatalog: boolean }) {
+  const { t, num } = useI18n();
+  const { runImport, isImporting, error } = useImport();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(!hasCatalog);
+  const [raw, setRaw] = useState("");
+  const [result, setResult] = useState<ParseResult | null>(null);
+
+  const handleFile = async (file: File | undefined) => {
+    if (!file) return;
+    const text = await file.text();
+    setRaw(text);
+    setResult(parseTable(text));
+  };
+
+  const handleParse = () => setResult(parseTable(raw));
+
+  const handleSave = async () => {
+    if (!result || result.sections.length === 0) return;
+    await runImport({ rawInput: raw, parsed: result.sections });
+    setResult(null);
+    setRaw("");
+    setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+          <FileUp className="size-4" />
+          {t("newImport")}
+        </Button>
+      </div>
+    );
+  }
+
+  const uniqueCourses = new Set((result?.sections ?? []).map((s) => s.courseCode)).size;
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+      <h2 className="text-lg">{t("importTitle")}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{t("importSubtitle")}</p>
+
+      <Textarea
+        value={raw}
+        onChange={(e) => {
+          setRaw(e.target.value);
+          setResult(null);
+        }}
+        placeholder={t("pastePlaceholder")}
+        className="mt-3 min-h-40 font-mono text-xs"
+      />
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,.txt,text/csv,text/plain"
+        className="hidden"
+        onChange={(e) => void handleFile(e.target.files?.[0])}
+      />
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
+          <FileUp className="size-4" />
+          {t("chooseFile")}
+        </Button>
+        <Button type="button" size="sm" onClick={handleParse} disabled={raw.trim().length === 0}>
+          {t("parseTable")}
+        </Button>
+        {result && result.sections.length > 0 ? (
+          <Button type="button" size="sm" variant="secondary" onClick={() => void handleSave()} disabled={isImporting}>
+            {isImporting ? <Loader2 className="size-4 animate-spin" /> : null}
+            {t("saveImport")}
+          </Button>
+        ) : null}
+        {hasCatalog ? (
+          <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+            {t("back")}
+          </Button>
+        ) : null}
+      </div>
+
+      {result ? (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          <Badge variant="secondary">
+            {num(uniqueCourses)} {t("importedCourses")}
+          </Badge>
+          <Badge variant="secondary">
+            {num(result.sections.length)} {t("importedSections")}
+          </Badge>
+          {result.ambiguous.length > 0 ? (
+            <Badge variant="outline" className="gap-1">
+              <AlertTriangle className="size-3" />
+              {num(result.ambiguous.length)} {t("ambiguousRows")}
+            </Badge>
+          ) : null}
+        </div>
+      ) : null}
+
+      {result && result.ambiguous.length > 0 ? (
+        <p className="mt-2 text-xs text-muted-foreground">{t("aiAssistHint")}</p>
+      ) : null}
+
+      {error ? <p className="mt-2 text-xs text-destructive">{error.message}</p> : null}
+    </section>
   );
 }
 
@@ -171,39 +263,5 @@ function ChoiceChip({ active, onClick, label }: { active: boolean; onClick: () =
     >
       {label}
     </button>
-  );
-}
-
-function StatusBadge({ status }: { status: string | undefined }) {
-  const { t } = useI18n();
-  if (!status) return null;
-  if (status === "passed" || status === "eligible") {
-    return (
-      <Badge variant="secondary" className="shrink-0 gap-1">
-        <Check className="size-3" />
-        {status === "passed" ? t("passed") : t("eligible")}
-      </Badge>
-    );
-  }
-  if (status === "uncertain") {
-    return (
-      <Badge variant="outline" className="shrink-0 gap-1">
-        <CircleHelp className="size-3" />
-        {t("uncertain")}
-      </Badge>
-    );
-  }
-  if (status === "no_sections") {
-    return (
-      <Badge variant="outline" className="shrink-0">
-        {t("noSections")}
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="outline" className="shrink-0 gap-1 text-muted-foreground">
-      <AlertTriangle className="size-3" />
-      {t("missingPrereq")}
-    </Badge>
   );
 }
