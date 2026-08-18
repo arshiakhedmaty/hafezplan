@@ -1,0 +1,35 @@
+name: HafezPlan CI/CD
+
+# این بخش مشخص می‌کند که با هر push یا pull_request روی شاخه main، عملیات تست و بیلد اجرا شود
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # نصب و راه‌اندازی پکیج‌منیجر فوق‌سریع Bun در سرور گیت‌هاب
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: latest
+
+    # نصب دقیق پکیج‌ها بر اساس فایل bun.lock موجود در پروژه
+    - name: Install dependencies
+      run: bun install --frozen-lockfile
+
+    # بررسی صحت کدها، تایپ‌ها و بیلد نهایی پروژه Vite
+    - name: Lint and Type Check
+      run: bun run build
+چگونگی اعمال تغییرات روی گیت‌هاب:
+کافیست پس از انجام تغییرات بالا در پروژه خود، تغییرات را کامیت کرده و روی گیت‌هاب Push کنید:
+git add .
+git commit -m "chore: setup bun and fix github actions build workflow"
+git push origin main
