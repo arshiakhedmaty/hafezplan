@@ -29,7 +29,10 @@ const merge = (a: PrereqResult, b: PrereqResult): PrereqResult => ({
  * Deterministically evaluate a structured prerequisite tree.
  * Supports single, AND, OR and arbitrarily nested combinations.
  */
-export function evaluatePrereq(node: PrereqNode | null | undefined, ctx: PrereqContext): PrereqResult {
+export function evaluatePrereq(
+  node: PrereqNode | null | undefined,
+  ctx: PrereqContext,
+): PrereqResult {
   if (!node) return { outcome: "satisfied", missing: [], unknownCodes: [] };
 
   if (node.type === "course") {

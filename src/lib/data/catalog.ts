@@ -18,6 +18,50 @@ export interface Catalog {
   sections: Section[];
 }
 
+export interface AcademicProfile {
+  displayName: string | null;
+  major: string | null;
+  degree: string | null;
+  semester: number | null;
+  gender: Exclude<Gender, "mixed"> | null;
+  minCredits: number;
+  maxCredits: number;
+}
+
+export async function fetchProfile(userId: string): Promise<AcademicProfile | null> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("display_name, major, degree, semester, gender, min_credits, max_credits")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    displayName: data.display_name,
+    major: data.major,
+    degree: data.degree,
+    semester: data.semester,
+    gender: data.gender === "male" || data.gender === "female" ? data.gender : null,
+    minCredits: data.min_credits,
+    maxCredits: data.max_credits,
+  };
+}
+
+export async function saveProfile(userId: string, patch: Partial<AcademicProfile>): Promise<void> {
+  const row = {
+    user_id: userId,
+    ...(patch.displayName !== undefined ? { display_name: patch.displayName } : {}),
+    ...(patch.major !== undefined ? { major: patch.major } : {}),
+    ...(patch.degree !== undefined ? { degree: patch.degree } : {}),
+    ...(patch.semester !== undefined ? { semester: patch.semester } : {}),
+    ...(patch.gender !== undefined ? { gender: patch.gender } : {}),
+    ...(patch.minCredits !== undefined ? { min_credits: patch.minCredits } : {}),
+    ...(patch.maxCredits !== undefined ? { max_credits: patch.maxCredits } : {}),
+  };
+  const { error } = await supabase.from("profiles").upsert(row, { onConflict: "user_id" });
+  if (error) throw error;
+}
+
 export async function fetchCatalog(): Promise<Catalog> {
   const [coursesRes, sectionsRes] = await Promise.all([
     supabase.from("courses").select("*").order("code"),
@@ -54,15 +98,21 @@ export async function fetchCatalog(): Promise<Catalog> {
       location: row.location,
       meetings: (row.meetings ?? []) as unknown as Section["meetings"],
       exam:
-        row.exam_date && row.exam_start && row.exam_end
-          ? { date: row.exam_date_label ?? row.exam_date, start: row.exam_start, end: row.exam_end }
+        (row.exam_date_label || row.exam_date) && row.exam_start && row.exam_end
+          ? {
+              date: (row.exam_date ?? row.exam_date_label)!,
+              start: row.exam_start,
+              end: row.exam_end,
+            }
           : null,
     }));
 
   return { courses, sections };
 }
 
-/* -------------------- import (paste / CSV) -------------------- */
+/* -------------------- reviewed catalog import -------------------- */
+
+export type ImportSourceType = "paste" | "csv" | "json" | "image" | "manual";
 
 export interface ImportSummary {
   importId: string;
@@ -71,88 +121,44 @@ export interface ImportSummary {
 }
 
 /**
- * Replaces the student's own catalog with the freshly parsed table.
- * Only rows owned by this user are touched; shared rows stay untouched.
+ * Atomically confirms a reviewed import. Validation happens in the review
+ * layer and the database transaction either replaces the whole owned catalog
+ * or leaves the previous catalog untouched.
  */
 export async function saveImport(
-  userId: string,
   rawInput: string,
   parsed: ParsedSection[],
+  sourceType: ImportSourceType,
 ): Promise<ImportSummary> {
-  const importRes = await supabase
-    .from("imports")
-    .insert({ user_id: userId, raw_input: rawInput.slice(0, 200000), source_type: "paste" })
-    .select("id")
-    .single();
-  if (importRes.error) throw importRes.error;
-  const importId = importRes.data.id;
-
-  // Start clean: a new import is the new source of truth for this user.
-  const delSections = await supabase.from("course_sections").delete().eq("owner_id", userId);
-  if (delSections.error) throw delSections.error;
-  const delCourses = await supabase.from("courses").delete().eq("owner_id", userId);
-  if (delCourses.error) throw delCourses.error;
-
-  const uniqueCourses = new Map<string, { code: string; name: string; credits: number }>();
-  for (const section of parsed) {
-    if (!uniqueCourses.has(section.courseCode)) {
-      uniqueCourses.set(section.courseCode, {
-        code: section.courseCode,
-        name: section.courseName,
-        credits: section.units,
-      });
-    }
-  }
-
-  const courseRows = [...uniqueCourses.values()].map((course) => ({
-    owner_id: userId,
-    import_id: importId,
-    code: course.code,
-    name_en: course.name,
-    name_fa: course.name,
-    credits: Math.max(0, Math.round(course.credits)),
+  if (parsed.length === 0) throw new Error("sections_required");
+  const courseCount = new Set(parsed.map((section) => section.courseCode)).size;
+  const payload = parsed.map((section) => ({
+    course_code: section.courseCode,
+    course_name: section.courseName,
+    group_number: section.groupNumber,
+    units: Math.round(section.units),
+    capacity: section.capacity,
+    gender: section.gender,
+    professor: section.professor,
+    location: null,
+    meetings: section.meetings,
+    exam: section.exam,
   }));
-
-  if (courseRows.length === 0) return { importId, courses: 0, sections: 0 };
-
-  const insertedCourses = await supabase.from("courses").insert(courseRows).select("id, code");
-  if (insertedCourses.error) throw insertedCourses.error;
-  const idByCode = new Map((insertedCourses.data ?? []).map((row) => [row.code, row.id]));
-
-  const sectionRows = parsed
-    .filter((section) => idByCode.has(section.courseCode))
-    .map((section) => ({
-      owner_id: userId,
-      import_id: importId,
-      course_id: idByCode.get(section.courseCode)!,
-      section_name: section.groupNumber,
-      group_number: section.groupNumber,
-      gender: section.gender,
-      professor: section.professor || null,
-      capacity: section.capacity,
-      meetings: section.meetings as unknown as never,
-      exam_date: section.exam ? section.exam.date : null,
-      exam_date_label: section.exam ? section.exam.label : null,
-      exam_start: section.exam ? section.exam.start : null,
-      exam_end: section.exam ? section.exam.end : null,
-    }));
-
-  if (sectionRows.length > 0) {
-    const insertedSections = await supabase.from("course_sections").insert(sectionRows);
-    if (insertedSections.error) throw insertedSections.error;
-  }
-
-  await supabase
-    .from("imports")
-    .update({ stats: { courses: courseRows.length, sections: sectionRows.length } })
-    .eq("id", importId);
-
-  return { importId, courses: courseRows.length, sections: sectionRows.length };
+  const { data, error } = await supabase.rpc("confirm_catalog_import", {
+    p_raw_input: rawInput.slice(0, 200000),
+    p_source_type: sourceType,
+    p_stats: { courses: courseCount, sections: parsed.length },
+    p_sections: payload as unknown as never,
+  });
+  if (error) throw error;
+  return { importId: data, courses: courseCount, sections: parsed.length };
 }
 
 /* -------------------- per-course take/neutral/skip -------------------- */
 
-export async function fetchCoursePreferences(userId: string): Promise<Record<string, CoursePreference>> {
+export async function fetchCoursePreferences(
+  userId: string,
+): Promise<Record<string, CoursePreference>> {
   const { data, error } = await supabase
     .from("course_preferences")
     .select("course_id, preference")
@@ -179,7 +185,10 @@ export async function saveCoursePreference(
   }
   const { error } = await supabase
     .from("course_preferences")
-    .upsert({ user_id: userId, course_id: courseId, preference }, { onConflict: "user_id,course_id" });
+    .upsert(
+      { user_id: userId, course_id: courseId, preference },
+      { onConflict: "user_id,course_id" },
+    );
   if (error) throw error;
 }
 
@@ -216,10 +225,9 @@ export async function fetchStudentState(userId: string): Promise<StudentState> {
   return state;
 }
 
-/** Replaces the student's whole record; simple and always consistent. */
-export async function saveStudentState(userId: string, state: StudentState): Promise<void> {
+/** Atomically replaces the student's whole academic record. */
+export async function saveStudentState(_userId: string, state: StudentState): Promise<void> {
   const rows: {
-    user_id: string;
     course_code: string;
     status: string;
     override_eligible: boolean | null;
@@ -228,7 +236,6 @@ export async function saveStudentState(userId: string, state: StudentState): Pro
   for (const status of statuses) {
     for (const code of state[status] as string[]) {
       rows.push({
-        user_id: userId,
         course_code: code,
         status,
         override_eligible: state.overrides[code] ?? null,
@@ -237,16 +244,18 @@ export async function saveStudentState(userId: string, state: StudentState): Pro
   }
   for (const [code, value] of Object.entries(state.overrides)) {
     if (!rows.some((r) => r.course_code === code)) {
-      rows.push({ user_id: userId, course_code: code, status: "current", override_eligible: value });
+      rows.push({
+        course_code: code,
+        status: "current",
+        override_eligible: value,
+      });
     }
   }
 
-  const del = await supabase.from("student_courses").delete().eq("user_id", userId);
-  if (del.error) throw del.error;
-  if (rows.length > 0) {
-    const ins = await supabase.from("student_courses").insert(rows);
-    if (ins.error) throw ins.error;
-  }
+  const { error } = await supabase.rpc("replace_student_courses", {
+    p_rows: rows as unknown as never,
+  });
+  if (error) throw error;
 }
 
 export async function fetchPreferences(userId: string): Promise<Preferences> {
@@ -271,13 +280,50 @@ export async function savePreferences(userId: string, preferences: Preferences):
   if (error) throw error;
 }
 
-export async function saveChosenPlan(userId: string, label: string, data: unknown): Promise<void> {
-  await supabase.from("plans").update({ is_final: false }).eq("user_id", userId);
-  const { error } = await supabase.from("plans").insert({
-    user_id: userId,
-    label,
-    is_final: true,
-    data: data as never,
+export interface SavedPlanRecord {
+  id: string;
+  label: string | null;
+  isFinal: boolean;
+  data: unknown;
+  createdAt: string;
+}
+
+export async function fetchSavedPlans(userId: string): Promise<SavedPlanRecord[]> {
+  const { data, error } = await supabase
+    .from("plans")
+    .select("id, label, is_final, data, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    label: row.label,
+    isFinal: row.is_final,
+    data: row.data,
+    createdAt: row.created_at,
+  }));
+}
+
+/** Saves a snapshot and promotes it as the user's only final plan in one transaction. */
+export async function saveChosenPlan(
+  _userId: string,
+  label: string,
+  data: unknown,
+): Promise<string> {
+  const { data: planId, error } = await supabase.rpc("save_final_plan", {
+    p_label: label,
+    p_data: data as never,
   });
+  if (error) throw error;
+  return planId;
+}
+
+export async function setFinalPlan(planId: string): Promise<void> {
+  const { error } = await supabase.rpc("set_final_plan", { p_plan_id: planId });
+  if (error) throw error;
+}
+
+export async function deleteSavedPlan(userId: string, planId: string): Promise<void> {
+  const { error } = await supabase.from("plans").delete().eq("id", planId).eq("user_id", userId);
   if (error) throw error;
 }

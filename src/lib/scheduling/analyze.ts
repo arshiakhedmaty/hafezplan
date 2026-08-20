@@ -10,7 +10,7 @@ export interface DifferenceOption {
 
 export interface DifferenceGroup {
   id: string;
-  type: "professor" | "freeDay" | "classDays" | "course";
+  type: "professor" | "freeDay" | "classDays" | "courseDay" | "course";
   courseCode: string | null;
   options: DifferenceOption[];
 }
@@ -52,6 +52,33 @@ export function analyzeDifferences(plans: Plan[]): DifferenceGroup[] {
           refinement: { kind: "professor", courseCode: code, professor } satisfies Refinement,
         })),
     });
+  }
+
+  // Meeting days for a course, when its schedule genuinely varies.
+  for (const code of courseAppearance.keys()) {
+    const dayCounts = new Map<number, number>();
+    for (const plan of plans) {
+      const entry = plan.entries.find((candidate) => candidate.course.code === code);
+      const days = new Set(entry?.section.meetings.map((meeting) => meeting.day) ?? []);
+      for (const day of days) dayCounts.set(day, (dayCounts.get(day) ?? 0) + 1);
+    }
+    const options = [...dayCounts.entries()]
+      .filter(([, count]) => count > 0 && count < plans.length)
+      .sort((a, b) => a[0] - b[0])
+      .map(([day, count]) => ({
+        key: `courseDay:${code}:${day}`,
+        value: day,
+        count,
+        refinement: { kind: "courseDay", courseCode: code, day } satisfies Refinement,
+      }));
+    if (options.length > 0) {
+      groups.push({
+        id: `courseDay:${code}`,
+        type: "courseDay",
+        courseCode: code,
+        options,
+      });
+    }
   }
 
   // Days that are free in some plans but not all
@@ -123,16 +150,40 @@ export interface ComparisonRow {
 export function comparePlans(plans: Plan[]): ComparisonRow[] {
   if (plans.length === 0) return [];
   const rows: ComparisonRow[] = [];
-  const push = (type: ComparisonRow["type"], courseCode: string | null, values: (string | number)[]) => {
+  const push = (
+    type: ComparisonRow["type"],
+    courseCode: string | null,
+    values: (string | number)[],
+  ) => {
     const differs = new Set(values.map(String)).size > 1;
     rows.push({ type, courseCode, values, differs });
   };
 
-  push("credits", null, plans.map((p) => p.credits));
-  push("classDays", null, plans.map((p) => p.classDays.length));
-  push("freeDays", null, plans.map((p) => p.freeDays.join(",")));
-  push("earliest", null, plans.map((p) => p.earliestStart));
-  push("latest", null, plans.map((p) => p.latestEnd));
+  push(
+    "credits",
+    null,
+    plans.map((p) => p.credits),
+  );
+  push(
+    "classDays",
+    null,
+    plans.map((p) => p.classDays.length),
+  );
+  push(
+    "freeDays",
+    null,
+    plans.map((p) => p.freeDays.join(",")),
+  );
+  push(
+    "earliest",
+    null,
+    plans.map((p) => p.earliestStart),
+  );
+  push(
+    "latest",
+    null,
+    plans.map((p) => p.latestEnd),
+  );
 
   const codes = new Set<string>();
   for (const plan of plans) for (const e of plan.entries) codes.add(e.course.code);

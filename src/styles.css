@@ -178,6 +178,39 @@
 
 @utility surface-ornament {
   background-image:
-    radial-gradient(circle at 15% 12%, color-mix(in oklab, var(--color-primary) 12%, transparent), transparent 45%),
-    radial-gradient(circle at 85% 8%, color-mix(in oklab, var(--color-gold) 16%, transparent), transparent 40%);
+    radial-gradient(
+      circle at 15% 12%,
+      color-mix(in oklab, var(--color-primary) 12%, transparent),
+      transparent 45%
+    ),
+    radial-gradient(
+      circle at 85% 8%,
+      color-mix(in oklab, var(--color-gold) 16%, transparent),
+      transparent 40%
+    );
+}
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  [data-print-plan="true"],
+  [data-print-plan="true"] * {
+    visibility: visible !important;
+  }
+
+  [data-print-plan="true"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border: 0 !important;
+    box-shadow: none !important;
+    color: #111 !important;
+    background: #fff !important;
+  }
 }

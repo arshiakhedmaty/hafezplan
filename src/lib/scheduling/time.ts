@@ -16,7 +16,19 @@ export function isValidTime(time: string): boolean {
 }
 
 export function isValidDate(date: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date));
+  const match = date.match(/^(\d{4})([-/])(\d{2})\2(\d{2})$/);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[3]);
+  const day = Number(match[4]);
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > 31) return false;
+  if (match[2] === "/") return true; // A validated local-calendar label (normally Jalali).
+  const value = new Date(Date.UTC(year, month - 1, day));
+  return (
+    value.getUTCFullYear() === year &&
+    value.getUTCMonth() === month - 1 &&
+    value.getUTCDate() === day
+  );
 }
 
 /** Half-open overlap: 11:00-13:00 and 13:00-15:00 do NOT overlap. */

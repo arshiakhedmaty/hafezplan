@@ -33,7 +33,11 @@ export interface EligibilityInput {
  * Determines, for every offered course, whether the student may actually take it.
  * "Offered" never implies "eligible".
  */
-export function evaluateEligibility({ courses, sections, student }: EligibilityInput): CourseEligibility[] {
+export function evaluateEligibility({
+  courses,
+  sections,
+  student,
+}: EligibilityInput): CourseEligibility[] {
   const known = new Set(courses.map((c) => c.code));
   const completed = new Set(student.passed);
   const current = new Set(student.current);

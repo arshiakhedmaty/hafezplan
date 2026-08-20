@@ -26,7 +26,9 @@ export const Route = createFileRoute("/_authenticated")({
       if (isRedirect(error)) throw error;
       if (isConnectionError(error)) {
         notifyConnectionIssue();
-        const { data: sessionData } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+        const { data: sessionData } = await supabase.auth
+          .getSession()
+          .catch(() => ({ data: { session: null } }));
         if (sessionData.session?.user) return { user: sessionData.session.user };
       }
       throw redirect({ to: "/auth", search: { redirect: location.pathname } });

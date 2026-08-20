@@ -14,7 +14,10 @@ export const Route = createFileRoute("/_authenticated/preferences")({
   head: () => ({
     meta: [
       { title: "Preferences — HafezPlan" },
-      { name: "description", content: "Set credit limits, blocked times and preferred free days for your semester plan." },
+      {
+        name: "description",
+        content: "Set credit limits, blocked times and preferred free days for your semester plan.",
+      },
       { property: "og:title", content: "Preferences — HafezPlan" },
       { property: "og:description", content: "Tell HafezPlan your real scheduling constraints." },
     ],
@@ -24,10 +27,25 @@ export const Route = createFileRoute("/_authenticated/preferences")({
 
 function PreferencesPage() {
   const { t, num, dayShort } = useI18n();
-  const { preferences, isLoading, save } = usePreferences();
+  const preferenceState = usePreferences();
+  const { preferences, isLoading, save } = preferenceState;
   const [draft, setDraft] = useState<Meeting>({ day: 0, start: "08:00", end: "10:00" });
 
   const update = (patch: Partial<Preferences>) => save({ ...preferences, ...patch });
+  const creditRangeValid =
+    preferences.minCredits >= 12 &&
+    preferences.maxCredits <= 24 &&
+    preferences.minCredits <= preferences.maxCredits;
+  const semesterRangeValid =
+    (!preferences.semesterStart && !preferences.semesterEnd) ||
+    (Boolean(preferences.semesterStart) &&
+      Boolean(preferences.semesterEnd) &&
+      preferences.semesterStart! <= preferences.semesterEnd!);
+  const dailyRangeValid =
+    !preferences.noEarlierThan ||
+    !preferences.noLaterThan ||
+    preferences.noEarlierThan <= preferences.noLaterThan;
+  const canGenerate = creditRangeValid && semesterRangeValid && dailyRangeValid;
 
   const toggleFreeDay = (day: number) =>
     update({
@@ -46,6 +64,17 @@ function PreferencesPage() {
     );
   }
 
+  if (preferenceState.error) {
+    return (
+      <div className="rounded-xl border border-destructive/40 bg-card p-6 text-center">
+        <p className="text-sm text-muted-foreground">{t("dataLoadFailed")}</p>
+        <Button className="mt-4" variant="outline" onClick={() => void preferenceState.retry()}>
+          {t("retry")}
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <header>
@@ -57,25 +86,33 @@ function PreferencesPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="min">{t("minCredits")}</Label>
-            <Input
+            <select
               id="min"
-              type="number"
-              min={0}
-              max={30}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={preferences.minCredits}
-              onChange={(e) => update({ minCredits: Number(e.target.value) })}
-            />
+              onChange={(event) => update({ minCredits: Number(event.target.value) })}
+            >
+              {Array.from({ length: 13 }, (_, index) => index + 12).map((value) => (
+                <option key={value} value={value}>
+                  {num(value)}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="max">{t("maxCredits")}</Label>
-            <Input
+            <select
               id="max"
-              type="number"
-              min={1}
-              max={30}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={preferences.maxCredits}
-              onChange={(e) => update({ maxCredits: Number(e.target.value) })}
-            />
+              onChange={(event) => update({ maxCredits: Number(event.target.value) })}
+            >
+              {Array.from({ length: 13 }, (_, index) => index + 12).map((value) => (
+                <option key={value} value={value}>
+                  {num(value)}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="early">{t("noEarlierThan")}</Label>
@@ -95,6 +132,33 @@ function PreferencesPage() {
               dir="ltr"
               value={preferences.noLaterThan ?? ""}
               onChange={(e) => update({ noLaterThan: e.target.value || null })}
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <h2 className="text-lg">{t("semesterDates")}</h2>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="semester-start">{t("semesterStart")}</Label>
+            <Input
+              id="semester-start"
+              type="date"
+              dir="ltr"
+              value={preferences.semesterStart ?? ""}
+              onChange={(event) => update({ semesterStart: event.target.value || null })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="semester-end">{t("semesterEnd")}</Label>
+            <Input
+              id="semester-end"
+              type="date"
+              dir="ltr"
+              min={preferences.semesterStart ?? undefined}
+              value={preferences.semesterEnd ?? ""}
+              onChange={(event) => update({ semesterEnd: event.target.value || null })}
             />
           </div>
         </div>
@@ -163,7 +227,10 @@ function PreferencesPage() {
               className="flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2 text-sm"
             >
               <span className="min-w-0 truncate">
-                {dayShort(block.day)} · <span dir="ltr">{block.start}–{block.end}</span>
+                {dayShort(block.day)} ·{" "}
+                <span dir="ltr">
+                  {block.start}–{block.end}
+                </span>
               </span>
               <Button
                 variant="ghost"
@@ -205,6 +272,7 @@ function PreferencesPage() {
           />
           <Button
             variant="outline"
+            disabled={!draft.start || !draft.end || draft.start >= draft.end}
             onClick={() => update({ blockedTimes: [...preferences.blockedTimes, draft] })}
           >
             <Plus className="size-4" />
@@ -213,10 +281,21 @@ function PreferencesPage() {
         </div>
       </section>
 
+      {!canGenerate ? (
+        <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+          {t("preferencesInvalid")}
+        </p>
+      ) : null}
       <div className="flex justify-end">
-        <Button asChild size="lg">
-          <Link to="/plans">{t("generate")}</Link>
-        </Button>
+        {canGenerate ? (
+          <Button asChild size="lg">
+            <Link to="/plans">{t("generate")}</Link>
+          </Button>
+        ) : (
+          <Button size="lg" disabled>
+            {t("generate")}
+          </Button>
+        )}
       </div>
     </div>
   );

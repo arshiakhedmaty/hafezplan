@@ -1,23 +1,18 @@
 /**
- * Core scheduling domain types.
- * This module is pure data — no UI, no database, no framework imports.
+ * Pure scheduling domain types. This module deliberately has no UI, database,
+ * network, or framework dependencies so the planner can be tested in isolation.
  */
 
 /** 0 = Saturday ... 6 = Friday (Iranian academic week). */
 export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export const WEEKDAYS: Weekday[] = [0, 1, 2, 3, 4, 5, 6];
+/** Normal university teaching week: Saturday through Wednesday. */
+export const CLASS_DAYS: Weekday[] = [0, 1, 2, 3, 4];
 
-/** University week: Saturday..Wednesday. Thursday and Friday are always off. */
-export const CLASS_DAYS: number[] = [0, 1, 2, 3, 4];
-
-/** Hard bounds of the teaching day. */
 export const DAY_START = "07:45";
 export const DAY_END = "20:00";
-
-/** Selectable minutes for blocked-time pickers. */
-export const MINUTE_STEPS = [0, 15, 30, 45];
-
+export const MINUTE_STEPS = [0, 15, 30, 45] as const;
 export const MIN_CREDITS = 12;
 export const MAX_CREDITS = 24;
 
@@ -25,14 +20,14 @@ export type Gender = "male" | "female" | "mixed";
 
 export interface Meeting {
   day: number;
-  /** "HH:MM" 24h */
+  /** 24-hour HH:MM. */
   start: string;
-  /** "HH:MM" 24h */
+  /** 24-hour HH:MM. Endpoints are exclusive, so adjacent classes are valid. */
   end: string;
 }
 
 export interface ExamSlot {
-  /** As written in the university table (usually a Jalali date). */
+  /** ISO date or the normalized date label supplied by the university. */
   date: string;
   start: string;
   end: string;
@@ -70,18 +65,26 @@ export interface Section {
   exam?: ExamSlot | null;
 }
 
-/** The only three choices a student makes per course. */
 export type CoursePreference = "take" | "neutral" | "skip";
-
 export type CoursePreferenceMap = Record<string, CoursePreference>;
 
 export interface Preferences {
   minCredits: number;
   maxCredits: number;
-  /** Times the student is never available. */
+  /** Times the student can never attend. */
   blockedTimes: Meeting[];
-  /** Student gender; drives which sections are allowed. */
+  /** Section eligibility constraint. Mixed sections remain available to everyone. */
   gender: "male" | "female" | null;
+  /** Hard class-time bounds selected by the student. */
+  noEarlierThan: string | null;
+  noLaterThan: string | null;
+  /** Soft ranking preference; a refinement can turn one into a hard free day. */
+  preferredFreeDays: number[];
+  /** Hard limit when set. */
+  maxClassDays: number | null;
+  /** Optional Gregorian dates used only to produce accurate recurring ICS events. */
+  semesterStart: string | null;
+  semesterEnd: string | null;
 }
 
 export const defaultPreferences = (): Preferences => ({
@@ -89,16 +92,25 @@ export const defaultPreferences = (): Preferences => ({
   maxCredits: MAX_CREDITS,
   blockedTimes: [],
   gender: null,
+  noEarlierThan: null,
+  noLaterThan: null,
+  preferredFreeDays: [],
+  maxClassDays: null,
+  semesterStart: null,
+  semesterEnd: null,
 });
 
-/** Hard filters chosen while browsing results. */
+/** Hard filters selected while browsing candidates. */
 export type Refinement =
   | { kind: "professor"; courseCode: string; professor: string }
   | { kind: "section"; courseCode: string; sectionId: string; label: string }
   | { kind: "includeCourse"; courseCode: string }
   | { kind: "excludeCourse"; courseCode: string }
   | { kind: "freeDay"; day: number }
-  | { kind: "maxClassDays"; value: number };
+  | { kind: "courseDay"; courseCode: string; day: number }
+  | { kind: "maxClassDays"; value: number }
+  | { kind: "noEarlierThan"; time: string }
+  | { kind: "noLaterThan"; time: string };
 
 export interface PlanEntry {
   section: Section;
@@ -114,11 +126,9 @@ export interface Plan {
   earliestStart: string;
   latestEnd: string;
   score: number;
-  /** 0–100 relative ranking, for display only. */
+  /** Relative 0–100 display score. It never changes validity. */
   match: number;
 }
-
-/* ---- legacy student-record types, kept for the eligibility helpers ---- */
 
 export type StudentCourseStatus = "passed" | "current" | "failed" | "required" | "avoid";
 
@@ -128,6 +138,7 @@ export interface StudentState {
   failed: string[];
   required: string[];
   avoid: string[];
+  /** Explicit human review of otherwise uncertain eligibility. */
   overrides: Record<string, boolean>;
 }
 
