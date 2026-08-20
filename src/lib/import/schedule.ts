@@ -2,6 +2,13 @@ import type { ExamSlot, Meeting } from "@/lib/scheduling/types";
 import { normalizeText } from "./normalize";
 
 const DAY_PATTERNS: { day: number; re: RegExp }[] = [
+  { day: 0, re: /saturday/gi },
+  { day: 1, re: /sunday/gi },
+  { day: 2, re: /monday/gi },
+  { day: 3, re: /tuesday/gi },
+  { day: 4, re: /wednesday/gi },
+  { day: 5, re: /thursday/gi },
+  { day: 6, re: /friday/gi },
   { day: 1, re: /یک\s*شنبه/g },
   { day: 2, re: /دو\s*شنبه/g },
   { day: 3, re: /سه\s*شنبه/g },
@@ -88,7 +95,11 @@ export function parseClassSchedule(raw: string): ParsedSchedule {
 
   const deduped: Meeting[] = [];
   for (const meeting of meetings) {
-    if (!deduped.some((d) => d.day === meeting.day && d.start === meeting.start && d.end === meeting.end)) {
+    if (
+      !deduped.some(
+        (d) => d.day === meeting.day && d.start === meeting.start && d.end === meeting.end,
+      )
+    ) {
       deduped.push(meeting);
     }
   }
@@ -101,30 +112,31 @@ export interface ParsedExam {
   ambiguous: boolean;
 }
 
-/** Parses an exam cell like "1403/03/25 ساعت 08:00-10:00". Dates stay as written. */
+/** Parses an exam cell; Gregorian dates are normalized to ISO while Jalali labels stay unchanged. */
 export function parseExam(raw: string): ParsedExam {
   const text = normalizeText(raw ?? "");
   if (!text || /^(ندارد|-|—|بدون امتحان)$/i.test(text)) return { exam: null, ambiguous: false };
 
-  const dateMatch = text.match(/(\d{4})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{1,2})/);
+  const dateMatch = text.match(/(\d{4})\s*[/.-]\s*(\d{1,2})\s*[/.-]\s*(\d{1,2})/);
   TIME_RANGE.lastIndex = 0;
   const timeMatch = TIME_RANGE.exec(text);
 
   if (!dateMatch) return { exam: null, ambiguous: true };
 
   const label = `${dateMatch[1]}/${pad(dateMatch[2]!)}/${pad(dateMatch[3]!)}`;
+  const date = Number(dateMatch[1]) >= 1900 ? label.replaceAll("/", "-") : label;
   if (!timeMatch) {
     const single = text.match(/(\d{1,2})\s*[:.]\s*(\d{2})/);
     if (!single) return { exam: null, ambiguous: true };
     const start = `${pad(single[1]!)}:${single[2]!}`;
     const endMinutes = Number(single[1]) * 60 + Number(single[2]) + 120;
     const end = `${pad(String(Math.floor(endMinutes / 60)))}:${pad(String(endMinutes % 60))}`;
-    return { exam: { date: label, start, end, label }, ambiguous: false };
+    return { exam: { date, start, end, label }, ambiguous: false };
   }
 
   return {
     exam: {
-      date: label,
+      date,
       start: `${pad(timeMatch[1]!)}:${timeMatch[2]!}`,
       end: `${pad(timeMatch[3]!)}:${timeMatch[4]!}`,
       label,

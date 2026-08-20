@@ -17,7 +17,10 @@ export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
       { title: "Sign in — HafezPlan" },
-      { name: "description", content: "Sign in to save your courses, preferences and semester plans in HafezPlan." },
+      {
+        name: "description",
+        content: "Sign in to save your courses, preferences and semester plans in HafezPlan.",
+      },
       { property: "og:title", content: "Sign in — HafezPlan" },
       { property: "og:description", content: "Access your saved HafezPlan course plans." },
     ],
@@ -137,7 +140,9 @@ function AuthPage() {
           className="mt-5 w-full text-sm text-muted-foreground underline-offset-4 hover:underline"
           onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
         >
-          {mode === "signin" ? `${t("noAccount")} ${t("signUp")}` : `${t("haveAccount")} ${t("signIn")}`}
+          {mode === "signin"
+            ? `${t("noAccount")} ${t("signUp")}`
+            : `${t("haveAccount")} ${t("signIn")}`}
         </button>
       </div>
     </div>

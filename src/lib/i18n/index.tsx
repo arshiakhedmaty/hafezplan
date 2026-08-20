@@ -1,7 +1,29 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 export type Lang = "fa" | "en";
 export type Dir = "rtl" | "ltr";
+
+export function resolveLanguage(value: string | null): Lang {
+  return value === "en" ? "en" : "fa";
+}
+
+export function languageAttributes(lang: Lang): { lang: Lang; dir: Dir } {
+  return { lang, dir: lang === "fa" ? "rtl" : "ltr" };
+}
+
+export function applyLanguageToRoot(root: { lang: string; dir: string }, lang: Lang): void {
+  const attributes = languageAttributes(lang);
+  root.lang = attributes.lang;
+  root.dir = attributes.dir;
+}
 
 export const strings = {
   appName: { fa: "حافظ‌پلن", en: "HafezPlan" },
@@ -24,7 +46,10 @@ export const strings = {
   email: { fa: "ایمیل", en: "Email" },
   password: { fa: "رمز عبور", en: "Password" },
   continueWithGoogle: { fa: "ورود با گوگل", en: "Continue with Google" },
-  checkEmail: { fa: "برای تأیید حساب، ایمیلت را بررسی کن.", en: "Check your email to confirm your account." },
+  checkEmail: {
+    fa: "برای تأیید حساب، ایمیلت را بررسی کن.",
+    en: "Check your email to confirm your account.",
+  },
   authTitle: { fa: "ورود به حافظ‌پلن", en: "Sign in to HafezPlan" },
   authSubtitle: {
     fa: "برنامه‌ها و دروس تو روی حساب کاربری ذخیره می‌شوند.",
@@ -140,6 +165,102 @@ export const strings = {
   preferences: { fa: "ترجیح‌ها", en: "Preferences" },
   plans: { fa: "برنامه‌ها", en: "Plans" },
   loading: { fa: "در حال بارگذاری…", en: "Loading…" },
+  importWorkflow: { fa: "فرایند ورود امن", en: "Safe import workflow" },
+  importSubtitleFull: {
+    fa: "جدول را بارگذاری کن، هر ردیف نامطمئن را بازبینی و اصلاح کن، سپس نسخهٔ تأییدشده را ذخیره کن.",
+    en: "Upload the table, review and correct every uncertain row, then save only the confirmed version.",
+  },
+  upload: { fa: "بارگذاری", en: "Upload" },
+  reviewEdit: { fa: "بازبینی و ویرایش", en: "Review and edit" },
+  validateConfirm: { fa: "اعتبارسنجی و تأیید", en: "Validate and confirm" },
+  importFormat: { fa: "روش ورود", en: "Import method" },
+  pasteText: { fa: "چسباندن متن", en: "Paste text" },
+  screenshot: { fa: "تصویر", en: "Screenshot" },
+  manualEntry: { fa: "ورود دستی", en: "Manual entry" },
+  imagePrivacyHint: {
+    fa: "تصویر فقط برای استخراج متن استفاده می‌شود. اگر سرویس استخراج تنظیم نشده باشد، تشخیص محلی مرورگر امتحان می‌شود.",
+    en: "The image is used only to extract text. If no extraction service is configured, local browser recognition is attempted.",
+  },
+  extracting: { fa: "در حال استخراج…", en: "Extracting…" },
+  chooseImage: { fa: "انتخاب تصویر", en: "Choose image" },
+  manualHint: {
+    fa: "در مرحلهٔ بعد ردیف‌های درس را یکی‌یکی اضافه کن.",
+    en: "Add course rows one by one in the next step.",
+  },
+  jsonPlaceholder: {
+    fa: "آرایهٔ JSON گروه‌های درسی یا شیء دارای sections…",
+    en: "A JSON section array or an object containing sections…",
+  },
+  importInputRequired: {
+    fa: "ابتدا متن یا فایل را وارد کن.",
+    en: "Paste text or choose a file first.",
+  },
+  reviewHint: {
+    fa: "هیچ داده‌ای پیش از تأیید این صفحه وارد زمان‌بندی نمی‌شود.",
+    en: "Nothing on this page enters scheduling until you confirm it.",
+  },
+  rowsNeedAttention: { fa: "ردیف نیازمند اصلاح", en: "rows need attention" },
+  noReadableRows: {
+    fa: "ردیف قابل استفاده‌ای پیدا نشد؛ یک ردیف دستی اضافه کن.",
+    en: "No usable rows were found; add a manual row.",
+  },
+  addRow: { fa: "افزودن ردیف", en: "Add row" },
+  deleteRow: { fa: "حذف ردیف", en: "Delete row" },
+  confirmAndSave: { fa: "تأیید و ذخیره", en: "Confirm and save" },
+  importSaveFailed: {
+    fa: "ذخیرهٔ تراکنشی ناموفق بود؛ دادهٔ قبلی دست‌نخورده باقی ماند.",
+    en: "The transaction failed; your previous catalog was left unchanged.",
+  },
+  setupCombinedHint: {
+    fa: "سابقهٔ تحصیلی و تصمیم این ترم را برای هر درس مشخص کن.",
+    en: "Set your academic history and this semester's choice for each course.",
+  },
+  academicStatus: { fa: "سابقهٔ تحصیلی", en: "Academic status" },
+  coursePreference: { fa: "تصمیم این ترم", en: "This semester's choice" },
+  courseCode: { fa: "کد درس", en: "Course code" },
+  courseName: { fa: "نام درس", en: "Course name" },
+  capacity: { fa: "ظرفیت", en: "Capacity" },
+  mixed: { fa: "مختلط", en: "Mixed" },
+  classTime: { fa: "زمان کلاس", en: "Class time" },
+  compare: { fa: "افزودن به مقایسه", en: "Add to compare" },
+  comparePlans: { fa: "مقایسهٔ برنامه‌ها", en: "Compare plans" },
+  print: { fa: "چاپ", en: "Print" },
+  semesterDatesRequired: {
+    fa: "برای خروجی تقویم، تاریخ شروع و پایان ترم را در ترجیح‌ها وارد کن.",
+    en: "Set the semester start and end dates in Preferences before exporting a calendar.",
+  },
+  exportFailed: { fa: "ساخت خروجی ناموفق بود.", en: "Could not create the export." },
+  dataLoadFailed: {
+    fa: "بارگذاری اطلاعات برنامه‌ریزی ناموفق بود. برنامه‌ای با دادهٔ ناقص نمایش داده نشد.",
+    en: "Planning data could not be loaded. No schedule was shown from incomplete data.",
+  },
+  retry: { fa: "تلاش دوباره", en: "Try again" },
+  preferencesInvalid: {
+    fa: "بازهٔ واحد، ساعت‌ها یا تاریخ‌های ترم معتبر نیست.",
+    en: "The credit range, daily times, or semester dates are invalid.",
+  },
+  semesterDates: { fa: "تاریخ‌های ترم", en: "Semester dates" },
+  semesterStart: { fa: "شروع ترم", en: "Semester start" },
+  semesterEnd: { fa: "پایان ترم", en: "Semester end" },
+  savedPlans: { fa: "برنامه‌های ذخیره‌شده", en: "Saved plans" },
+  viewPlan: { fa: "مشاهدهٔ برنامه", en: "View plan" },
+  hidePlan: { fa: "بستن برنامه", en: "Hide plan" },
+  deletePlan: { fa: "حذف برنامه", en: "Delete plan" },
+  deletePlanConfirm: {
+    fa: "این نسخهٔ ذخیره‌شده حذف شود؟",
+    en: "Delete this saved plan version?",
+  },
+  savedPlanUnavailable: {
+    fa: "این نسخه با قالب قدیمی ذخیره شده و قابل نمایش نیست.",
+    en: "This version uses an older snapshot format and cannot be displayed.",
+  },
+  finalPlan: { fa: "نهایی", en: "Final" },
+  makeFinal: { fa: "انتخاب نهایی", en: "Make final" },
+  profileDetails: { fa: "مشخصات تحصیلی", en: "Academic profile" },
+  major: { fa: "رشته", en: "Major" },
+  degree: { fa: "مقطع", en: "Degree" },
+  semester: { fa: "ترم", en: "Semester" },
+  loadSample: { fa: "بارگذاری نمونهٔ فیزیک", en: "Load physics sample" },
 } as const;
 
 export type StringKey = keyof typeof strings;
@@ -173,7 +294,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const stored = window.localStorage.getItem("hafezplan.lang");
-    if (stored === "fa" || stored === "en") setLangState(stored);
+    setLangState(resolveLanguage(stored));
   }, []);
 
   const setLang = useCallback((next: Lang) => {
@@ -181,12 +302,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem("hafezplan.lang", next);
   }, []);
 
-  const dir: Dir = lang === "fa" ? "rtl" : "ltr";
+  const dir = languageAttributes(lang).dir;
 
   useEffect(() => {
-    document.documentElement.lang = lang;
-    document.documentElement.dir = dir;
-  }, [lang, dir]);
+    applyLanguageToRoot(document.documentElement, lang);
+  }, [lang]);
 
   const value = useMemo<I18nValue>(
     () => ({
@@ -198,7 +318,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       dayName: (day) => DAY_NAMES[lang][day] ?? "",
       dayShort: (day) => DAY_SHORT[lang][day] ?? "",
       num: (value) =>
-        lang === "fa" ? String(value).replace(/[0-9]/g, (d) => FA_DIGITS[Number(d)]!) : String(value),
+        lang === "fa"
+          ? String(value).replace(/[0-9]/g, (d) => FA_DIGITS[Number(d)]!)
+          : String(value),
     }),
     [lang, dir, setLang],
   );

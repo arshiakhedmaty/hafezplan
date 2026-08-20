@@ -77,14 +77,24 @@ export function validateCatalog({ courses, sections }: ValidationInput): Validat
     }
     for (const meeting of section.meetings ?? []) {
       if (!isValidTime(meeting.start) || !isValidTime(meeting.end)) {
-        issues.push({ level: "error", code: "invalid_time", target: key, detail: `${meeting.start}-${meeting.end}` });
+        issues.push({
+          level: "error",
+          code: "invalid_time",
+          target: key,
+          detail: `${meeting.start}-${meeting.end}`,
+        });
         continue;
       }
       if (toMinutes(meeting.end) <= toMinutes(meeting.start)) {
         issues.push({ level: "error", code: "reversed_time", target: key });
       }
       if (meeting.day < 0 || meeting.day > 6) {
-        issues.push({ level: "error", code: "invalid_time", target: key, detail: String(meeting.day) });
+        issues.push({
+          level: "error",
+          code: "invalid_time",
+          target: key,
+          detail: String(meeting.day),
+        });
       }
     }
     if (selfConflicting(section.meetings ?? [])) {
@@ -92,7 +102,12 @@ export function validateCatalog({ courses, sections }: ValidationInput): Validat
     }
     if (section.exam) {
       if (!isValidDate(section.exam.date)) {
-        issues.push({ level: "error", code: "invalid_date", target: key, detail: section.exam.date });
+        issues.push({
+          level: "error",
+          code: "invalid_date",
+          target: key,
+          detail: section.exam.date,
+        });
       }
       if (!isValidTime(section.exam.start) || !isValidTime(section.exam.end)) {
         issues.push({ level: "error", code: "invalid_time", target: key });
@@ -112,7 +127,8 @@ function selfConflicting(meetings: Meeting[]): boolean {
       const b = meetings[j]!;
       if (a.day !== b.day) continue;
       if (!isValidTime(a.start) || !isValidTime(b.start)) continue;
-      if (toMinutes(a.start) < toMinutes(b.end) && toMinutes(b.start) < toMinutes(a.end)) return true;
+      if (toMinutes(a.start) < toMinutes(b.end) && toMinutes(b.start) < toMinutes(a.end))
+        return true;
     }
   }
   return false;

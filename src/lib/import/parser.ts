@@ -23,7 +23,12 @@ const HEADER_HINTS: { field: Field; patterns: RegExp[] }[] = [
   { field: "professor", patterns: [/استاد/, /مدرس/, /professor/i, /instructor/i] },
   {
     field: "classSchedule",
-    patterns: [/زمان\s*(و\s*مکان\s*)?(ارائه|کلاس)/, /ساعت\s*کلاس/, /زمان\s*ارایه/, /class\s*(time|schedule)/i],
+    patterns: [
+      /زمان\s*(و\s*مکان\s*)?(ارائه|کلاس)/,
+      /ساعت\s*کلاس/,
+      /زمان\s*ارایه/,
+      /class\s*(time|schedule)/i,
+    ],
   },
   {
     field: "examSchedule",
@@ -70,7 +75,7 @@ function toNumber(value: string): number | null {
 /**
  * Rule-based parser for a pasted university offerings table.
  * Repeated headers, separators and duplicate rows are dropped; rows the parser
- * cannot read confidently are returned as `ambiguous` for AI fallback.
+ * cannot read confidently are returned as `ambiguous` for explicit user review (and optional extraction assistance).
  */
 export function parseTable(input: string): ParseResult {
   const rows = splitRows(input ?? "");

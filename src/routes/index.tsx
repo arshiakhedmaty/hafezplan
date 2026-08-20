@@ -15,7 +15,8 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "HafezPlan — Build a valid semester schedule" },
       {
         property: "og:description",
-        content: "Deterministic, bilingual course planning with prerequisite and conflict checking.",
+        content:
+          "Deterministic, bilingual course planning with prerequisite and conflict checking.",
       },
     ],
   }),
@@ -26,9 +27,21 @@ function Index() {
   const { t, toggleLang } = useI18n();
 
   const points = [
-    { icon: ShieldCheck, fa: "پیش‌نیازها و تداخل کلاس و امتحان دقیق بررسی می‌شود.", en: "Prerequisites, class conflicts and exam conflicts are checked exactly." },
-    { icon: CalendarRange, fa: "هر برنامه‌ای که می‌بینی واقعاً قابل انتخاب است.", en: "Every plan you see is genuinely selectable." },
-    { icon: Sparkles, fa: "با چند انتخاب ساده از میان ده‌ها برنامه به یکی می‌رسی.", en: "A few simple choices narrow dozens of plans down to one." },
+    {
+      icon: ShieldCheck,
+      fa: "پیش‌نیازها و تداخل کلاس و امتحان دقیق بررسی می‌شود.",
+      en: "Prerequisites, class conflicts and exam conflicts are checked exactly.",
+    },
+    {
+      icon: CalendarRange,
+      fa: "هر برنامه‌ای که می‌بینی واقعاً قابل انتخاب است.",
+      en: "Every plan you see is genuinely selectable.",
+    },
+    {
+      icon: Sparkles,
+      fa: "با چند انتخاب ساده از میان ده‌ها برنامه به یکی می‌رسی.",
+      en: "A few simple choices narrow dozens of plans down to one.",
+    },
   ];
 
   return (
